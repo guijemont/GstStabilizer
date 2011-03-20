@@ -13,12 +13,12 @@ class VirtualTripod(gst.Element):
     sink_template = gst.PadTemplate ("sink",
                                      gst.PAD_SINK,
                                      gst.PAD_ALWAYS,
-                                     gst.Caps('video/x-raw-rgb'))
+                                     gst.Caps('video/x-raw-gray,depth=8'))
 
     src_template = gst.PadTemplate ("source",
                                        gst.PAD_SRC,
                                        gst.PAD_ALWAYS,
-                                       gst.Caps('video/x-raw-rgb'))
+                                       gst.Caps('video/x-raw-gray,depth=8'))
 
     __gsttemplates__ = (sink_template, src_template)
 
@@ -34,17 +34,12 @@ class VirtualTripod(gst.Element):
 
 
     def _buf_to_cv_img(self, buf):
-        # cv.IPL_DEPTH_16S  cv.IPL_DEPTH_16U  cv.IPL_DEPTH_32F
-        # cv.IPL_DEPTH_32S  cv.IPL_DEPTH_64F  cv.IPL_DEPTH_8S   cv.IPL_DEPTH_8U
-        # cv.IPL_ORIGIN_BL  cv.IPL_ORIGIN_TL
-        depth_conversion = {8: cv.IPL_DEPTH_8U, 16: cv.IPL_DEPTH_16U}
         struct = buf.caps[0]
         width = struct['width']
         height = struct['height']
-        channels = 3 # we only accept x-raw-rgb
-        depth = struct['depth'] / channels
-        img = cv.CreateImageHeader((width, height), depth_conversion[depth],
-                                   channels);
+        channels = 1    # we only accept x-raw-gray for now
+        depth = 8       # depth=8 also in the caps
+        img = cv.CreateImageHeader((width, height), depth, channels);
         cv.SetData (img, buf.data)
 
         return img
