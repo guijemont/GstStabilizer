@@ -1,5 +1,7 @@
 #!/usr/bin/env python
-import glib,gobject, gst
+import glib,gobject,gst,sys
+
+from itertools import izip
 
 import cv
 
@@ -22,6 +24,9 @@ class VirtualTripod(gst.Element):
 
     __gsttemplates__ = (sink_template, src_template)
 
+    # value taken from opencv's find_obj.cpp sample
+    SECOND_SHORTEST_RATIO = 0.6
+
     def __init__(self):
         gst.Element.__init__(self)
 
@@ -32,6 +37,12 @@ class VirtualTripod(gst.Element):
         self.srcpad = gst.Pad(self.src_template)
         self.add_pad(self.srcpad)
 
+        self._mem_storage = cv.CreateMemStorage()
+
+        self._first_keypoints = None
+        self._first_descriptors = None
+
+        self._last_buf = None
 
     def _buf_to_cv_img(self, buf):
         struct = buf.caps[0]
@@ -44,17 +55,121 @@ class VirtualTripod(gst.Element):
 
         return img
 
+    def _euclidian_distance(self, vector1, vector2, maximum=None):
+        # if this is too slow, we could use numpy to do the job:
+        # http://stackoverflow.com/questions/1401712/calculate-euclidean-distance-with-numpy
+        d = 0
+        for x1,x2 in izip(vector1, vector2):
+            sqr_d = x1 - x2
+            d += sqr_d * sqr_d
+            if maximum is not None and d > maximum:
+                # we're not interested in distances that are bigger than
+                # maximum, stop computing it.
+                break
+
+        return d
+
+    def _naive_nearest_neighbor (self, keypoint, descriptor):
+        shortest = None
+        second_shortest = None
+        neighbor = None
+        for original_kp, original_desc in  \
+                izip(self._first_keypoints, self._first_descriptors):
+            # compare laplacians, stored in tuple element 1
+            if keypoint[1] != original_kp[1]:
+                continue
+            d = self._euclidian_distance(descriptor, original_desc,
+                                         second_shortest)
+            if shortest is None or d < shortest:
+                second_shortest = shortest
+                shortest = d
+                neighbor = original_kp
+            elif second_shortest is None or d < second_shortest:
+                second_shortest = d
+
+        if shortest < self.SECOND_SHORTEST_RATIO * second_shortest:
+            return neighbor
+
+        return None
+
+    def _find_pairs (self, keypoints, descriptors):
+        original_plane, frame_plane = [], []
+        for kp,desc in izip(keypoints, descriptors):
+            neighbor_kp = self._naive_nearest_neighbor (kp, desc)
+            if neighbor_kp is not None:
+                original_plane.append(neighbor_kp[0])
+                frame_plane.append(kp[0])
+
+        return original_plane, frame_plane
+
+    def _print_matrix(self, mat):
+        for i in xrange(mat.rows):
+            for j in xrange(mat.cols):
+                print "% 13.8f" % mat[i, j],
+            print
+
+    def _find_homography(self, img):
+        keypoints, descriptors = cv.ExtractSURF(img, None,
+                                                self._mem_storage,
+                                                (0, 2000, 3, 1))
+        print "Got %d key points and %d descriptors" % (len(keypoints),
+                                                        len(descriptors))
+
+        if self._first_keypoints is None:
+            self._first_keypoints = keypoints
+            self._first_descriptors = descriptors
+        else:
+            original_plane, frame_plane = self._find_pairs (keypoints, descriptors)
+            n = len(original_plane)
+            print "found %d pairs" % n
+            orig_mat = cv.CreateMat(1, n, cv.CV_32FC2)
+            for i in xrange(n):
+                orig_mat[0, i] = original_plane[i]
+            frame_mat = cv.CreateMat(1, n, cv.CV_32FC2)
+            for i in xrange(n):
+                frame_mat[0, i] = frame_plane[i]
+            homography = cv.CreateMat(3, 3, cv.CV_64F)
+            # we get the homography to go from the original frame to the
+            # current frame. That's the inverse of the homography we want to
+            # apply, which is what cv.WarpPerspective() likes most
+            cv.FindHomography (orig_mat, frame_mat, homography)
+            print "found homography:"
+            self._print_matrix (homography)
+            return homography
+
 
     def chain(self, pad, buf):
         print "Got buffer:", repr(buf)
-        return self.srcpad.push(buf)
+
+        img = self._buf_to_cv_img (buf)
+        homography = self._find_homography(img)
+        if homography:
+            #newbuf = self._last_buf.copy()
+            #import pdb; pdb.set_trace()
+            new_data = '\0' * buf.size
+            #new_img = self._buf_to_cv_img (newbuf)
+            new_img = cv.CreateImageHeader((buf.caps[0]['width'], buf.caps[0]['height']),
+                                          8, 1)
+            cv.SetData(new_img, new_data)
+            cv.WarpPerspective(img, new_img, homography, cv.CV_WARP_INVERSE_MAP)
+            newbuf = gst.Buffer(new_data)
+            newbuf.caps = buf.caps
+            newbuf.duration = buf.duration
+            newbuf.timestamp = buf.timestamp
+            newbuf.offset = buf.offset
+            newbuf.offset_end = buf.offset_end
+            return self.srcpad.push(newbuf)
+        else:
+            # first frame
+            self._last_buf = buf
+            return self.srcpad.push(buf)
 
 
 gobject.type_register (VirtualTripod)
 ret = gst.element_register (VirtualTripod, 'virtualtripod')
 
 def main(args):
-    pipeline = gst.parse_launch("videotestsrc ! virtualtripod ! fakesink")
+    pipeline = gst.parse_launch("filesrc location=/home/guijemont/Photos/tests/test_guij.ogg ! decodebin ! ffvideoscale  ! ffmpegcolorspace ! video/x-raw-gray,width=320,height=240 ! virtualtripod ! ffmpegcolorspace ! xvimagesink")
     pipeline.set_state (gst.STATE_PLAYING)
     gobject.MainLoop().run()
 
