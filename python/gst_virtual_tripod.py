@@ -137,6 +137,23 @@ class VirtualTripod(gst.Element):
             self._print_matrix (homography)
             return homography
 
+    def _apply_homography(self, homography, buf, img):
+        #newbuf = self._last_buf.copy()
+        #import pdb; pdb.set_trace()
+        new_data = '\0' * buf.size
+        #new_img = self._buf_to_cv_img (newbuf)
+        new_img = cv.CreateImageHeader((buf.caps[0]['width'], buf.caps[0]['height']),
+                                      8, 1)
+        cv.SetData(new_img, new_data)
+        cv.WarpPerspective(img, new_img, homography, cv.CV_WARP_INVERSE_MAP)
+        newbuf = gst.Buffer(new_data)
+        newbuf.caps = buf.caps
+        newbuf.duration = buf.duration
+        newbuf.timestamp = buf.timestamp
+        newbuf.offset = buf.offset
+        newbuf.offset_end = buf.offset_end
+        return newbuf
+
 
     def chain(self, pad, buf):
         print "Got buffer:", repr(buf)
@@ -144,20 +161,7 @@ class VirtualTripod(gst.Element):
         img = self._buf_to_cv_img (buf)
         homography = self._find_homography(img)
         if homography:
-            #newbuf = self._last_buf.copy()
-            #import pdb; pdb.set_trace()
-            new_data = '\0' * buf.size
-            #new_img = self._buf_to_cv_img (newbuf)
-            new_img = cv.CreateImageHeader((buf.caps[0]['width'], buf.caps[0]['height']),
-                                          8, 1)
-            cv.SetData(new_img, new_data)
-            cv.WarpPerspective(img, new_img, homography, cv.CV_WARP_INVERSE_MAP)
-            newbuf = gst.Buffer(new_data)
-            newbuf.caps = buf.caps
-            newbuf.duration = buf.duration
-            newbuf.timestamp = buf.timestamp
-            newbuf.offset = buf.offset
-            newbuf.offset_end = buf.offset_end
+            newbuf = self._apply_homography(homography, buf, img)
             return self.srcpad.push(newbuf)
         else:
             # first frame
