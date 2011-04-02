@@ -108,34 +108,42 @@ class VirtualTripod(gst.Element):
                 print "% 13.8f" % mat[i, j],
             print
 
-    def _find_homography(self, img):
+    def _find_planes (self, img):
         keypoints, descriptors = cv.ExtractSURF(img, None,
                                                 self._mem_storage,
                                                 (0, 2000, 3, 1))
         print "Got %d key points and %d descriptors" % (len(keypoints),
                                                         len(descriptors))
-
         if self._first_keypoints is None:
             self._first_keypoints = keypoints
             self._first_descriptors = descriptors
+            return None
         else:
             original_plane, frame_plane = self._find_pairs_from_keypoints (keypoints, descriptors)
-            n = len(original_plane)
-            print "found %d pairs" % n
-            orig_mat = cv.CreateMat(1, n, cv.CV_32FC2)
-            for i in xrange(n):
-                orig_mat[0, i] = original_plane[i]
-            frame_mat = cv.CreateMat(1, n, cv.CV_32FC2)
-            for i in xrange(n):
-                frame_mat[0, i] = frame_plane[i]
-            homography = cv.CreateMat(3, 3, cv.CV_64F)
-            # we get the homography to go from the original frame to the
-            # current frame. That's the inverse of the homography we want to
-            # apply, which is what cv.WarpPerspective() likes most
-            cv.FindHomography (orig_mat, frame_mat, homography)
-            print "found homography:"
-            self._print_matrix (homography)
-            return homography
+            return original_plane, frame_plane
+
+    def _find_homography(self, img):
+        planes = self._find_planes (img)
+        if planes is None:
+            return None
+
+        original_plane, frame_plane = planes
+        n = len(original_plane)
+        print "found %d pairs" % n
+        orig_mat = cv.CreateMat(1, n, cv.CV_32FC2)
+        for i in xrange(n):
+            orig_mat[0, i] = original_plane[i]
+        frame_mat = cv.CreateMat(1, n, cv.CV_32FC2)
+        for i in xrange(n):
+            frame_mat[0, i] = frame_plane[i]
+        homography = cv.CreateMat(3, 3, cv.CV_64F)
+        # we get the homography to go from the original frame to the
+        # current frame. That's the inverse of the homography we want to
+        # apply, which is what cv.WarpPerspective() likes most
+        cv.FindHomography (orig_mat, frame_mat, homography)
+        print "found homography:"
+        self._print_matrix (homography)
+        return homography
 
     def _apply_homography(self, homography, buf, img):
         #newbuf = self._last_buf.copy()
