@@ -92,7 +92,7 @@ class VirtualTripod(gst.Element):
 
         return None
 
-    def _find_pairs (self, keypoints, descriptors):
+    def _find_pairs_from_keypoints (self, keypoints, descriptors):
         original_plane, frame_plane = [], []
         for kp,desc in izip(keypoints, descriptors):
             neighbor_kp = self._naive_nearest_neighbor (kp, desc)
@@ -119,7 +119,7 @@ class VirtualTripod(gst.Element):
             self._first_keypoints = keypoints
             self._first_descriptors = descriptors
         else:
-            original_plane, frame_plane = self._find_pairs (keypoints, descriptors)
+            original_plane, frame_plane = self._find_pairs_from_keypoints (keypoints, descriptors)
             n = len(original_plane)
             print "found %d pairs" % n
             orig_mat = cv.CreateMat(1, n, cv.CV_32FC2)
