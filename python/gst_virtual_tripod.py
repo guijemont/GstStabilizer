@@ -167,15 +167,15 @@ class VirtualTripod(gst.Element):
         print "Got buffer:", repr(buf)
 
         img = self._buf_to_cv_img (buf)
-        homography = self._find_homography(img)
-        if homography:
-            newbuf = self._apply_homography(homography, buf, img)
-            self._last_buf = newbuf
-            return self.srcpad.push(newbuf)
-        else:
-            # first frame
-            self._last_buf = buf
-            return self.srcpad.push(buf)
+        planes = self._find_planes (img)
+        #homography = self._find_homography(img)
+        #if homography:
+        if planes:
+            #newbuf = self._apply_homography(homography, buf, img)
+            previous_plane, current_plane = planes
+            print "Got %d matches" % len(previous_plane)
+        self._last_buf = buf
+        return self.srcpad.push(buf)
 
 
 gobject.type_register (VirtualTripod)
