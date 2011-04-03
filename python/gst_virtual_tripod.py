@@ -166,10 +166,7 @@ class VirtualTripod(gst.Element):
         newbuf.offset_end = buf.offset_end
         return newbuf
 
-
     def chain(self, pad, buf):
-        print "Got buffer:", repr(buf)
-
         img = self._buf_to_cv_img (buf)
         planes = self._find_planes (img)
         #homography = self._find_homography(img)
