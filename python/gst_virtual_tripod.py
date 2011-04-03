@@ -170,6 +170,7 @@ class VirtualTripod(gst.Element):
         homography = self._find_homography(img)
         if homography:
             newbuf = self._apply_homography(homography, buf, img)
+            self._last_buf = newbuf
             return self.srcpad.push(newbuf)
         else:
             # first frame
