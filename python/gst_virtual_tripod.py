@@ -25,7 +25,7 @@ class VirtualTripod(gst.Element):
     __gsttemplates__ = (sink_template, src_template)
 
     # value taken from opencv's find_obj.cpp sample
-    SECOND_SHORTEST_RATIO = 0.6
+    SECOND_SHORTEST_RATIO = 0.4
 
     def __init__(self):
         gst.Element.__init__(self)
@@ -111,7 +111,7 @@ class VirtualTripod(gst.Element):
     def _find_planes (self, img):
         keypoints, descriptors = cv.ExtractSURF(img, None,
                                                 self._mem_storage,
-                                                (0, 2000, 3, 1))
+                                                (0, 5000, 3, 1))
         print "Got %d key points and %d descriptors" % (len(keypoints),
                                                         len(descriptors))
         if self._first_keypoints is None:
