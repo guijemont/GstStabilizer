@@ -155,6 +155,15 @@ class VirtualTripod(gst.Element):
     cv.SetData(new_img, new_data)
     return new_img
 
+  def _draw_cross(img, point, color):
+    x,y = point
+    cv.Line(img, (x-5, y-5), (x+5, y+5), color)
+    cv.Line(img, (x-5, y+5), (x+5, y-5), color)
+
+  def _show_points(self, img, points, color):
+    for point in points:
+      self._draw_cross(img, point, color)
+
   def _apply_homography(self, homography, buf, img):
     new_img = self._new_image((buf.caps[0]['width'], buf.caps[0]['height']))
     cv.WarpPerspective(img, new_img, homography, cv.CV_WARP_INVERSE_MAP)
