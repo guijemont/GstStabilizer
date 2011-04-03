@@ -175,9 +175,9 @@ class VirtualTripod(gst.Element):
         #homography = self._find_homography(img)
         #if homography:
         if planes:
-            #newbuf = self._apply_homography(homography, buf, img)
-            previous_plane, current_plane = planes
-            print "Got %d matches" % len(previous_plane)
+          #newbuf = self._apply_homography(homography, buf, img)
+          previous_plane, current_plane = planes
+          print "Got %d matches" % len(previous_plane)
         self._last_buf = buf
         return self.srcpad.push(buf)
 
