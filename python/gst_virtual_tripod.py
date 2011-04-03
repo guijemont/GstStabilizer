@@ -145,14 +145,18 @@ class VirtualTripod(gst.Element):
         self._print_matrix (homography)
         return homography
 
-    def _apply_homography(self, homography, buf, img):
-        #newbuf = self._last_buf.copy()
-        #import pdb; pdb.set_trace()
-        new_data = '\0' * buf.size
-        #new_img = self._buf_to_cv_img (newbuf)
-        new_img = cv.CreateImageHeader((buf.caps[0]['width'], buf.caps[0]['height']),
-                                      8, 1)
+    def _new_image(self, width, height):
+        """
+        Create a new 8 bit 1 plane grayscale image of width and height,
+        intialised with 0.
+        """
+        new_data = '\0' * width * height;
+        new_img = cv.CreateImageHeader((width, height), 8, 1)
         cv.SetData(new_img, new_data)
+        return new_img
+
+    def _apply_homography(self, homography, buf, img):
+        new_img = self._new_image((buf.caps[0]['width'], buf.caps[0]['height']))
         cv.WarpPerspective(img, new_img, homography, cv.CV_WARP_INVERSE_MAP)
         newbuf = gst.Buffer(new_data)
         newbuf.caps = buf.caps
