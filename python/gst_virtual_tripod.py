@@ -175,8 +175,13 @@ class VirtualTripod(gst.Element):
           #newbuf = self._apply_homography(homography, buf, img)
           previous_plane, current_plane = planes
           print "Got %d matches" % len(previous_plane)
+        buf_to_push = self._last_buf
         self._last_buf = buf
-        return self.srcpad.push(buf)
+        if buf_to_push:
+          return self.srcpad.push(buf_to_push)
+        else:
+          return gst.FLOW_OK
+
 
 
 gobject.type_register (VirtualTripod)
