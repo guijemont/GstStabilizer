@@ -114,7 +114,7 @@ class VirtualTripod(gst.Element):
   def _find_planes (self, img):
     keypoints, descriptors = cv.ExtractSURF(img, None,
                                             self._mem_storage,
-                                            (0, 5000, 3, 1))
+                                            (0, 9000, 3, 1))
     print "Got %d key points and %d descriptors" % (len(keypoints),
                                                     len(descriptors))
     if self._first_keypoints is None:
