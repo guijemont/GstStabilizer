@@ -43,6 +43,9 @@ class VirtualTripod(gst.Element):
     self._first_descriptors = None
 
     self._last_buf = None
+    # "backwards" points for _last_buf, and whether they should be displayed as
+    # crosses
+    self._last_buf_data = ([], False)
 
   def _buf_to_cv_img(self, buf):
     struct = buf.caps[0]
@@ -155,14 +158,37 @@ class VirtualTripod(gst.Element):
     cv.SetData(new_img, new_data)
     return new_img
 
-  def _draw_cross(img, point, color):
-    x,y = point
-    cv.Line(img, (x-5, y-5), (x+5, y+5), color)
-    cv.Line(img, (x-5, y+5), (x+5, y-5), color)
+  def _img_to_buf(self, img, bufmodel=None):
+    buf = gst.Buffer(img.tostring())
+    if bufmodel is not None:
+        buf.caps = bufmodel.caps
+        buf.duration = bufmodel.duration
+        buf.timestamp = bufmodel.timestamp
+        buf.offset = bufmodel.offset
+        buf.offset_end = bufmodel.offset_end
+    return buf
 
-  def _show_points(self, img, points, color):
+  def _draw_cross(self, img, point, cross):
+    x,y = point
+    def draw_line(P1, P2):
+      cv.Line(img, P1, P2, (128,), 2)
+    if cross:
+      draw_line((x-5, y-5), (x+5, y+5))
+      draw_line((x-5, y+5), (x+5, y-5))
+    else: # box
+      draw_line((x-5, y-5), (x+5, y-5))
+      draw_line((x+5, y-5), (x+5, y+5))
+      draw_line((x+5, y+5), (x-5, y+5))
+      draw_line((x-5, y+5), (x-5, y-5))
+
+  def _show_points(self, img, points, cross):
     for point in points:
-      self._draw_cross(img, point, color)
+      self._draw_cross(img, point, cross)
+
+  def _show_points_buf(self, buf, points, cross):
+    img = self._buf_to_cv_img(buf)
+    self._show_points(img, points, cross)
+    return self._img_to_buf(img, buf)
 
   def _apply_homography(self, homography, buf, img):
     new_img = self._new_image((buf.caps[0]['width'], buf.caps[0]['height']))
@@ -184,10 +210,18 @@ class VirtualTripod(gst.Element):
       #newbuf = self._apply_homography(homography, buf, img)
       previous_plane, current_plane = planes
       print "Got %d matches" % len(previous_plane)
-    buf_to_push = self._last_buf
+    previous_frame = self._last_buf
     self._last_buf = buf
-    if buf_to_push:
-      return self.srcpad.push(buf_to_push)
+    if previous_frame:
+      # note: we're about to display the previous frame and just queued the
+      # current one
+      previous_frame_next_points, current_frame_previous_points = planes
+      previous_frame_previous_points, previous_cross = self._last_buf_data
+      self._last_buf_data = current_frame_previous_points, (not previous_cross)
+      if previous_frame_previous_points:
+        previous_frame = self._show_points_buf(previous_frame, previous_frame_previous_points, previous_cross)
+      previous_frame = self._show_points_buf(previous_frame, previous_frame_next_points, (not previous_cross))
+      return self.srcpad.push(previous_frame)
     else:
       return gst.FLOW_OK
 
