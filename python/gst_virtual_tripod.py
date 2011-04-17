@@ -5,6 +5,11 @@ from itertools import izip
 
 import cv
 
+SHAPE_CROSS = 0
+SHAPE_BOX = 1
+SHAPE_CIRCLE = 2
+
+SHAPE_MODULO = 3
 
 class VirtualTripod(gst.Element):
   __gstdetails__ = ("virtual tripod",
@@ -168,26 +173,28 @@ class VirtualTripod(gst.Element):
         buf.offset_end = bufmodel.offset_end
     return buf
 
-  def _draw_cross(self, img, point, cross):
+  def _draw_shape(self, img, point, shape):
     x,y = point
     def draw_line(P1, P2):
       cv.Line(img, P1, P2, (128,), 2)
-    if cross:
+    if shape == SHAPE_CROSS:
       draw_line((x-5, y-5), (x+5, y+5))
       draw_line((x-5, y+5), (x+5, y-5))
-    else: # box
+    elif shape == SHAPE_BOX:
       draw_line((x-5, y-5), (x+5, y-5))
       draw_line((x+5, y-5), (x+5, y+5))
       draw_line((x+5, y+5), (x-5, y+5))
       draw_line((x-5, y+5), (x-5, y-5))
+    elif shape == SHAPE_CIRCLE:
+      cv.Circle(img, point, 5, (128,), 2)
 
-  def _show_points(self, img, points, cross):
+  def _show_points(self, img, points, shape):
     for point in points:
-      self._draw_cross(img, point, cross)
+      self._draw_shape(img, point, shape)
 
-  def _show_points_buf(self, buf, points, cross):
+  def _show_points_buf(self, buf, points, shape):
     img = self._buf_to_cv_img(buf)
-    self._show_points(img, points, cross)
+    self._show_points(img, points, shape)
     return self._img_to_buf(img, buf)
 
   def _apply_homography(self, homography, buf, img):
@@ -216,11 +223,12 @@ class VirtualTripod(gst.Element):
       # note: we're about to display the previous frame and just queued the
       # current one
       previous_frame_next_points, current_frame_previous_points = planes
-      previous_frame_previous_points, previous_cross = self._last_buf_data
-      self._last_buf_data = current_frame_previous_points, (not previous_cross)
+      previous_frame_previous_points, previous_shape = self._last_buf_data
+      current_shape = (previous_shape + 1) % SHAPE_MODULO
+      self._last_buf_data = current_frame_previous_points, current_shape
       if previous_frame_previous_points:
-        previous_frame = self._show_points_buf(previous_frame, previous_frame_previous_points, previous_cross)
-      previous_frame = self._show_points_buf(previous_frame, previous_frame_next_points, (not previous_cross))
+        previous_frame = self._show_points_buf(previous_frame, previous_frame_previous_points, previous_shape)
+      previous_frame = self._show_points_buf(previous_frame, previous_frame_next_points, current_shape)
       return self.srcpad.push(previous_frame)
     else:
       return gst.FLOW_OK
