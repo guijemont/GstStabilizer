@@ -175,18 +175,19 @@ class VirtualTripod(gst.Element):
 
   def _draw_shape(self, img, point, shape):
     x,y = point
+    size = 10
     def draw_line(P1, P2):
       cv.Line(img, P1, P2, (128,), 2)
     if shape == SHAPE_CROSS:
-      draw_line((x-5, y-5), (x+5, y+5))
-      draw_line((x-5, y+5), (x+5, y-5))
+      draw_line((x-size, y-size), (x+size, y+size))
+      draw_line((x-size, y+size), (x+size, y-size))
     elif shape == SHAPE_BOX:
-      draw_line((x-5, y-5), (x+5, y-5))
-      draw_line((x+5, y-5), (x+5, y+5))
-      draw_line((x+5, y+5), (x-5, y+5))
-      draw_line((x-5, y+5), (x-5, y-5))
+      draw_line((x-size, y-size), (x+size, y-size))
+      draw_line((x+size, y-size), (x+size, y+size))
+      draw_line((x+size, y+size), (x-size, y+size))
+      draw_line((x-size, y+size), (x-size, y-size))
     elif shape == SHAPE_CIRCLE:
-      cv.Circle(img, point, 5, (128,), 2)
+      cv.Circle(img, point, size, (128,), 2)
 
   def _show_points(self, img, points, shape):
     for point in points:
