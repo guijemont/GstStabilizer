@@ -108,7 +108,11 @@ class SuccessiveImageTransformer(object):
     Apply transformations on images that depend on the previous image (either
     raw or transformed).
     You want to subclass transform().
+
+    If reference_is_first is True, the transformation will be made compared to
+    the first image of the series, not the previous one.
     """
+    reference_is_first = False
     def __init__(self, *args, **kw):
         super(SuccessiveImageTransformer, self).__init__(*args, **kw)
         self._img0 = None
@@ -127,7 +131,8 @@ class SuccessiveImageTransformer(object):
         else:
             img_transformed = None
 
-        self._img0, self._img0_transformed = img, img_transformed
+        if self._img0 is None or self.reference_is_first == False:
+            self._img0, self._img0_transformed = img, img_transformed
 
         if img_transformed:
             return img_transformed
@@ -142,8 +147,10 @@ class SuccessiveImageTransformer(object):
         """
         raise NotImplementedError("transform() needs to be implemented in a subclass")
 
+class ReferenceImageTransformer(SuccessiveImageTransformer):
+    reference_is_first = True
 
-class OpticalFlowDrawer(SuccessiveImageTransformer):
+class OpticalFlowDrawer(ReferenceImageTransformer):
     def __init__(self, *args, **kw):
         super(OpticalFlowDrawer, self).__init__(*args, **kw)
         self._flow_finder = OpticalFlowFinder()
