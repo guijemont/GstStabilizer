@@ -51,14 +51,24 @@ class OpticalFlowFinder(object):
         img_size = cv.GetSize(img)
         eigImage = cv.CreateImage(img_size, cv.IPL_DEPTH_8U, 1)
         tempImage = cv.CreateImage(img_size, cv.IPL_DEPTH_8U, 1)
-        features = cv.GoodFeaturesToTrack(img, eigImage, tempImage, MAX_COUNT, 0.01, 10)
+        features = cv.GoodFeaturesToTrack(img, eigImage, tempImage,
+                                          MAX_COUNT, #number of corners to detect
+                                          0.1, #Multiplier for the max/min
+                                                #eigenvalue; specifies the minimal
+                                                #accepted quality of image corners
+                                          30 # minimum distance between returned corners
+                                          )
 
         return cv.FindCornerSubPix(img, features, (10, 10), (-1, -1),
                                    (cv.CV_TERMCRIT_ITER | cv.CV_TERMCRIT_EPS,
                                     20, 0.03))
 
-    def _filter_features(self, features, flter):
-        return [ p for (status,p) in zip(flter, features)]
+    def _filter_features(self, features, flter, errors):
+        filtered_errors = [err for (err, status) in zip(errors, flter) if status]
+        n = len(filtered_errors) / 2 # we want to keep the best third only
+        admissible_error = sorted(filtered_errors)[n]
+        return [ p for (status,p, err) in zip(flter, features, errors)
+                    if status and err < admissible_error]
 
     def optical_flow(self, img0, img1):
         """
@@ -68,15 +78,18 @@ class OpticalFlowFinder(object):
         """
         corners0 = self._features(img0)
 
-        corners1, status, _ = cv.CalcOpticalFlowPyrLK (
+        corners1, status, track_errors = cv.CalcOpticalFlowPyrLK (
                      img0, img1, None, None,
                      corners0,
-                     (10, 10), 3,
-                     (cv.CV_TERMCRIT_ITER|cv.CV_TERMCRIT_EPS, 20, 0.03),
-                     0)
+                     (30, 30), # win size
+                     3, # pyramid level
+                     (cv.CV_TERMCRIT_ITER|cv.CV_TERMCRIT_EPS, # stop type
+                      20, # max iterations
+                      0.01), # min accuracy
+                     0) # flags
 
-        corners0 = self._filter_features(corners0, status)
-        corners1 = self._filter_features(corners1, status)
+        corners0 = self._filter_features(corners0, status, track_errors)
+        corners1 = self._filter_features(corners1, status, track_errors)
 
         return (corners0, corners1)
 
