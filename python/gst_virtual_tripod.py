@@ -93,6 +93,25 @@ class OpticalFlowFinder(object):
 
         return (corners0, corners1)
 
+    def _mat_of_point_list(self, points):
+        n = len(points)
+        mat = cv.CreateMat(1, n, cv.CV_32FC2)
+        for i in xrange(n):
+          mat[0, i] = points[i]
+        return mat
+
+    def optical_flow_perspective_transform(self, img0, img1):
+        points0, points1 = self.optical_flow(img0, img1)
+
+        mat0 = self._mat_of_point_list (points0)
+        mat1 = self._mat_of_point_list (points1)
+        transform = cv.CreateMat(3, 3, cv.CV_64F)
+
+        cv.FindHomography(mat0, mat1, transform)
+
+        return transform
+
+
 class ArrowDrawer(object):
     def draw_arrows(self, img, origins, ends):
         for origin, end in zip(origins, ends):
@@ -102,6 +121,7 @@ class ArrowDrawer(object):
         cv.Line(img, origin, end, (128,), 2)
         # yeah, that's a lazy approximation of an arrow
         cv.Circle(img, end, 4, (128,), 2)
+
 
 class SuccessiveImageTransformer(object):
     """
@@ -164,6 +184,23 @@ class OpticalFlowDrawer(ReferenceImageTransformer):
 
         return img_result
 
+class MotionCompensator(ReferenceImageTransformer):
+    def __init__(self, *args, **kw):
+        super(MotionCompensator, self).__init__(*args, **kw)
+        self._flow_finder = OpticalFlowFinder()
+
+    def warp(self, img, perspective_transform):
+        new_img = cv.CreateImage((img.width, img.height), 8, 1)
+        cv.WarpPerspective(img, new_img,
+                           perspective_transform,
+                           cv.CV_WARP_INVERSE_MAP)
+        return new_img
+
+    def transform(self, img0, img0_transformed, img1):
+        persp_transform = \
+            self._flow_finder.optical_flow_perspective_transform(img0, img1)
+
+        return self.warp(img1, persp_transform)
 
 class VirtualTripod(gst.Element):
   __gstdetails__ = ("virtual tripod",
@@ -196,12 +233,12 @@ class VirtualTripod(gst.Element):
     self.srcpad = gst.Pad(self.src_template)
     self.add_pad(self.srcpad)
 
-    self._flow_drawer = OpticalFlowDrawer()
+    self._transformer = MotionCompensator()
 
 
   def chain(self, pad, buf):
     img = img_of_buf(buf)
-    transformed_img = self._flow_drawer.process_image(img)
+    transformed_img = self._transformer.process_image(img)
     new_buf = buf_of_img(transformed_img, bufmodel=buf)
 
     return self.srcpad.push(new_buf)
