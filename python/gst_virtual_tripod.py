@@ -11,6 +11,149 @@ SHAPE_CIRCLE = 2
 
 SHAPE_MODULO = 3
 
+MAX_COUNT = 500
+
+#
+# Algo idea:
+#
+# - get features of img0
+# - get optical flow (2 set of corresponding coordinates)
+# - compute homography from these
+#
+
+def img_of_buf(buf):
+    pass
+
+def buf_of_img(img):
+    pass
+
+class OpticalFlowFinder(object):
+    def _features(self, img):
+        img_size = cv.GetSize(img)
+        eigImage = cv.CreateImage(img_size, cv.IPL_DEPTH_8U, 1)
+        tempImage = cv.CreateImage(img_size, cv.IPL_DEPTH_8U, 1)
+        features = cv.GoodFeaturesToTrack(img, eigImage, tempImage, MAX_COUNT, 0.01, 10)
+
+        return cv.FindCornerSubPix(img, features, (10, 10), (-1, -1),
+                                   (cv.CV_TERMCRIT_ITER | cv.CV_TERMCRIT_EPS,
+                                    20, 0.03))
+
+    def _filter_features(self, features, flter):
+        return [ p for (status,p) in zip(flter, features)]
+
+    def optical_flow(self, img0, img1):
+        """
+        Return two sets of coordinates (c0, c1), in img0 and img1 respectively,
+        such that c1[i] is the position in img1 of the feature that is at c0[i]
+        in img0.
+        """
+        corners0 = self._features(img0)
+
+        corners1, status, _ = cv.CalcOpticalFlowPyrLK (
+                     img0, img1, None, None,
+                     corners0,
+                     (10, 10), 3,
+                     (cv.CV_TERMCRIT_ITER|cv.CV_TERMCRIT_EPS, 20, 0.03),
+                     0)
+
+        corners0 = self._filter_features(corners0, status)
+        corners1 = self._filter_features(corners1, status)
+
+        return (corners0, corners1)
+
+class HomographyFinder(object):
+    def __init__(self, *args, **kw):
+        super(HomographyFinder, self).__init__(*args, **kw)
+        self._img0 = None
+        self._flow_finder = OpticalFlowFinder()
+
+    def _mat_of_point_list(self, points):
+        n = len(points)
+        mat = cv.CreateMat(1, n, cv.CV_32FC2)
+        for i in xrange(n):
+          mat[0, i] = points[i]
+        return mat
+
+    def _homography(self, points0, points1):
+        mat0 = self._mat_of_point_list (points0)
+        mat1 = self._mat_of_point_list (points1)
+        homography = cv.CreateMat(3, 3, cv.CV_64F)
+
+        # This is the homography to go form mat0 to mat1. We will pass it to
+        # WarpPerspective() with img1, so that we can get it in the same configuration as img0
+        cv.FindHomography (mat0, mat1, homography)
+
+        return homography
+
+    def _img_to_buf(self, img, bufmodel=None):
+        buf = gst.Buffer(img.tostring())
+        if bufmodel is not None:
+            buf.caps = bufmodel.caps
+            buf.duration = bufmodel.duration
+            buf.timestamp = bufmodel.timestamp
+            buf.offset = bufmodel.offset
+            buf.offset_end = bufmodel.offset_end
+        return buf
+
+    def _new_image(self, width, height):
+        """
+        Create a new 8 bit 1 plane grayscale image of width and height,
+        intialised with 0.
+        """
+        new_data = '\0' * width * height;
+        new_img = cv.CreateImageHeader((width, height), 8, 1)
+        cv.SetData(new_img, new_data)
+        return new_img
+
+    def new_img(self, img1):
+        """
+        Returns the homography with previous image, or None if it's the first
+        image.
+        """
+        h = None
+        if self._img0 is not None:
+            corners0, corners1 = self._flow_finder.optical_flow(self._img0, img1)
+            h = self._homography (corners0, corners1)
+
+
+        self._img0 = img1
+
+        return h
+
+    def transform_buf(self, buf):
+        struct = buf.caps[0]
+        width = struct['width']
+        height = struct['height']
+        channels = 1    # we only accept x-raw-gray for now
+        depth = 8       # depth=8 also in the caps
+        img = cv.CreateImageHeader((width, height), depth, channels);
+        cv.SetData (img, buf.data)
+
+        new_img = self.transform_img(img)
+
+        if new_img:
+            return self._img_to_buf(new_img, bufmodel=buf)
+
+        return None
+
+    def transform_img(self, img):
+        h = self.new_img(img)
+        if h is not None:
+            # this should be the general case (not first image): we have an
+            # already "stabilised" image in ._img0. We "stabilise" img
+            # relatively to it (h is the homography to go from ._img0 to img).
+            self._img0 = self._apply_homography(h, img)
+            return self._img0
+
+        return img
+
+    def _apply_homography(self, homography, img):
+        new_img = self._new_image(*(cv.GetSize(img)))
+        cv.WarpPerspective(img, new_img, homography, cv.CV_WARP_INVERSE_MAP)
+
+        return new_img
+
+
 class VirtualTripod(gst.Element):
   __gstdetails__ = ("virtual tripod",
                     "Filter/Video",
@@ -51,6 +194,8 @@ class VirtualTripod(gst.Element):
     # "backwards" points for _last_buf, and whether they should be displayed as
     # crosses
     self._last_buf_data = ([], False)
+
+    self._h_finder = HomographyFinder()
 
   def _buf_to_cv_img(self, buf):
     struct = buf.caps[0]
@@ -210,6 +355,13 @@ class VirtualTripod(gst.Element):
     return newbuf
 
   def chain(self, pad, buf):
+
+    new_buf = self._h_finder.transform_buf(buf)
+    if new_buf:
+        return self.srcpad.push(new_buf)
+
+    return gst.FLOW_OK
+
     img = self._buf_to_cv_img (buf)
     planes = self._find_planes (img)
     #homography = self._find_homography(img)
