@@ -22,10 +22,29 @@ MAX_COUNT = 500
 #
 
 def img_of_buf(buf):
-    pass
+    struct = buf.caps[0]
+    width = struct['width']
+    height = struct['height']
+    channels = 1    # we only accept x-raw-gray for now
+    depth = 8       # depth=8 also in the caps
+    img = cv.CreateImageHeader((width, height), depth, channels);
+    cv.SetData (img, buf.data)
+    return img
 
-def buf_of_img(img):
-    pass
+def buf_of_img(img, bufmodel=None):
+    buf = gst.Buffer(img.tostring())
+    if bufmodel is not None:
+        buf.caps = bufmodel.caps
+        buf.duration = bufmodel.duration
+        buf.timestamp = bufmodel.timestamp
+        buf.offset = bufmodel.offset
+        buf.offset_end = bufmodel.offset_end
+    return buf
+
+def copy_img(img):
+    new_img = cv.CreateImageHeader((img.width, img.height), 8, 1)
+    cv.SetData(new_img, img.tostring())
+    return new_img
 
 class OpticalFlowFinder(object):
     def _features(self, img):
@@ -60,6 +79,71 @@ class OpticalFlowFinder(object):
         corners1 = self._filter_features(corners1, status)
 
         return (corners0, corners1)
+
+class ArrowDrawer(object):
+    def draw_arrows(self, img, origins, ends):
+        for origin, end in zip(origins, ends):
+            self.draw_arrow(img, origin, end)
+
+    def draw_arrow(self, img, origin, end):
+        cv.Line(img, origin, end, (128,), 2)
+        # yeah, that's a lazy approximation of an arrow
+        cv.Circle(img, end, 4, (128,), 2)
+
+class SuccessiveImageTransformer(object):
+    """
+    Apply transformations on images that depend on the previous image (either
+    raw or transformed).
+    You want to subclass transform().
+    """
+    def __init__(self, *args, **kw):
+        super(SuccessiveImageTransformer, self).__init__(*args, **kw)
+        self._img0 = None
+        self._img0_transformed = None
+
+    def process_image(self, img):
+        """
+        Will return img, as (optionally) transformed by transform(), and will
+        keep a reference on both img and its transformed value until the next
+        call to process_image().
+        """
+        if self._img0:
+            img_transformed = self.transform(self._img0,
+                                             self._img0_transformed,
+                                             img)
+        else:
+            img_transformed = None
+
+        self._img0, self._img0_transformed = img, img_transformed
+
+        if img_transformed:
+            return img_transformed
+        else:
+            return img
+
+    def transform(self, img0, img0_transformed, img1):
+        """
+        At this point, img0 and img0_transformed are the previous
+        image before and after transformation (the latter might be None),
+        img1 is the new image, and you should return a transformed version
+        """
+        raise NotImplementedError("transform() needs to be implemented in a subclass")
+
+
+class OpticalFlowDrawer(SuccessiveImageTransformer):
+    def __init__(self, *args, **kw):
+        super(OpticalFlowDrawer, self).__init__(*args, **kw)
+        self._flow_finder = OpticalFlowFinder()
+        self._drawer = ArrowDrawer()
+
+    def transform(self, img0, img0_transformed, img1):
+        origins, ends = self._flow_finder.optical_flow(img0, img1)
+
+        img_result = copy_img(img1)
+        self._drawer.draw_arrows(img_result, origins, ends)
+
+        return img_result
+
 
 class HomographyFinder(object):
     def __init__(self, *args, **kw):
@@ -196,6 +280,8 @@ class VirtualTripod(gst.Element):
     self._last_buf_data = ([], False)
 
     self._h_finder = HomographyFinder()
+
+    self._flow_drawer = OpticalFlowDrawer()
 
   def _buf_to_cv_img(self, buf):
     struct = buf.caps[0]
@@ -355,12 +441,12 @@ class VirtualTripod(gst.Element):
     return newbuf
 
   def chain(self, pad, buf):
+    img = img_of_buf(buf)
+    transformed_img = self._flow_drawer.process_image(img)
+    new_buf = buf_of_img(transformed_img, bufmodel=buf)
 
-    new_buf = self._h_finder.transform_buf(buf)
-    if new_buf:
-        return self.srcpad.push(new_buf)
+    return self.srcpad.push(new_buf)
 
-    return gst.FLOW_OK
 
     img = self._buf_to_cv_img (buf)
     planes = self._find_planes (img)
@@ -392,7 +478,7 @@ gobject.type_register (VirtualTripod)
 ret = gst.element_register (VirtualTripod, 'virtualtripod')
 
 def main(args):
-  pipeline = gst.parse_launch("filesrc location=/home/guijemont/Photos/tests/test_guij.ogg ! decodebin ! ffvideoscale  ! ffmpegcolorspace ! video/x-raw-gray,width=320,height=240 ! virtualtripod ! ffmpegcolorspace ! xvimagesink")
+  pipeline = gst.parse_launch("filesrc location=/home/guijemont/Photos/tests/test_guij.ogg ! decodebin ! ffvideoscale  ! ffmpegcolorspace ! video/x-raw-gray ! virtualtripod ! ffmpegcolorspace ! xvimagesink")
   pipeline.set_state (gst.STATE_PLAYING)
   gobject.MainLoop().run()
 
