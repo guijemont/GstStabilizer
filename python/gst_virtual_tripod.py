@@ -13,7 +13,7 @@ SHAPE_CIRCLE = 2
 
 SHAPE_MODULO = 3
 
-MAX_COUNT = 500
+MAX_COUNT = 20
 
 #
 # Algo idea:
@@ -58,7 +58,7 @@ class OpticalFlowFinder(object):
                                           0.1, #Multiplier for the max/min
                                                 #eigenvalue; specifies the minimal
                                                 #accepted quality of image corners
-                                          30 # minimum distance between returned corners
+                                          200 # minimum distance between returned corners
                                           )
 
         return cv.FindCornerSubPix(img, features, (10, 10), (-1, -1),
@@ -66,11 +66,11 @@ class OpticalFlowFinder(object):
                                     20, 0.03))
 
     def _filter_features(self, features, flter, errors):
-        filtered_errors = [err for (err, status) in zip(errors, flter) if status]
-        n = len(filtered_errors) / 2 # we want to keep the best third only
-        admissible_error = sorted(filtered_errors)[n]
+        #filtered_errors = [err for (err, status) in zip(errors, flter) if status]
+        #n = len(filtered_errors) / 2 # we want to keep the best third only
+        #admissible_error = sorted(filtered_errors)[n]
         return [ p for (status,p, err) in zip(flter, features, errors)
-                    if status and err < admissible_error]
+                    if status] # and err < admissible_error]
 
     def optical_flow(self, img0, img1):
         """
@@ -80,18 +80,22 @@ class OpticalFlowFinder(object):
         """
         corners0 = self._features(img0)
 
+        print "found %d features" % len(corners0)
+
         corners1, status, track_errors = cv.CalcOpticalFlowPyrLK (
                      img0, img1, None, None,
                      corners0,
                      (30, 30), # win size
-                     3, # pyramid level
+                     4, # pyramid level
                      (cv.CV_TERMCRIT_ITER|cv.CV_TERMCRIT_EPS, # stop type
-                      20, # max iterations
-                      0.01), # min accuracy
+                      50, # max iterations
+                      0.001), # min accuracy
                      0) # flags
 
         corners0 = self._filter_features(corners0, status, track_errors)
         corners1 = self._filter_features(corners1, status, track_errors)
+
+        print "corners returned: %d, %d"  % (len(corners0), len(corners1))
 
         return (corners0, corners1)
 
@@ -170,6 +174,7 @@ class OpticalFlowFinder(object):
         # FIXME: try to iter over that whole thing until we have something
         # nice? Find some way to make it stabilise?
         points0, points1 = self.optical_flow(img0, img1)
+        return points0, points1
 
         first_transform = self.perspective_transform_from_points(points0, points1)
 
