@@ -25,11 +25,11 @@ MAX_COUNT = 20
 # - compute homography from these
 #
 
-# For now, application/x-motion-flow is a pickle format 2 of a tuple containing
-# two lists. Each list (let's call them c0 and c1) contain 2-tuples
-# representing coordinates of a point, such that c0[i] is the (x,y) coordinate
-# of a feature in the previous frame, and c1[i] is the (x,y) coordinate of the
-# same feature in the current frame.
+# For now, application/x-motion-flow is a pickle format 2 of either None or a
+# tuple containing two lists. Each list (let's call them c0 and c1) contain
+# 2-tuples representing coordinates of a point, such that c0[i] is the (x,y)
+# coordinate of a feature in the previous frame, and c1[i] is the (x,y)
+# coordinate of the same feature in the current frame.
 
 
 def img_of_buf(buf):
@@ -90,9 +90,6 @@ class OpticalFlowFinder(gst.Element):
 
 
     def chain(self, pad, buf):
-        if self._previous_frame is None:
-            self._previous_frame = buf
-            return gst.FLOW_OK
 
         flow = self.optical_flow(self._previous_frame, buf)
 
@@ -137,6 +134,9 @@ class OpticalFlowFinder(gst.Element):
         such that c1[i] is the position in img1 of the feature that is at c0[i]
         in img0.
         """
+        if img0 is None:
+            return None
+
         corners0 = self._features(img0)
 
         print "found %d features" % len(corners0)
