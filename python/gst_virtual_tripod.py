@@ -5,6 +5,8 @@ from itertools import izip
 
 import numpy, math
 
+import cPickle
+
 import cv
 
 SHAPE_CROSS = 0
@@ -22,6 +24,13 @@ MAX_COUNT = 20
 # - get optical flow (2 set of corresponding coordinates)
 # - compute homography from these
 #
+
+# For now, application/x-motion-flow is a pickle format 2 of a tuple containing
+# two lists. Each list (let's call them c0 and c1) contain 2-tuples
+# representing coordinates of a point, such that c0[i] is the (x,y) coordinate
+# of a feature in the previous frame, and c1[i] is the (x,y) coordinate of the
+# same feature in the current frame.
+
 
 def img_of_buf(buf):
     struct = buf.caps[0]
@@ -48,7 +57,57 @@ def copy_img(img):
     cv.SetData(new_img, img.tostring())
     return new_img
 
-class OpticalFlowFinder(object):
+class OpticalFlowFinder(gst.Element):
+    __gstdetails__ = ("Optical flow finder",
+                    "Filter/Video",
+                    "find optical flow between frames",
+                    "Guillaume Emont")
+    sink_template = gst.PadTemplate ("sink",
+                                   gst.PAD_SINK,
+                                   gst.PAD_ALWAYS,
+                                   gst.Caps('video/x-raw-gray,depth=8'))
+
+    src_template = gst.PadTemplate ("source",
+                                     gst.PAD_SRC,
+                                     gst.PAD_ALWAYS,
+                                     gst.Caps('application/x-motion-flow'))
+
+    __gsttemplates__ = (sink_template, src_template)
+
+    PICKLE_FORMAT = 2
+
+    def __init__(self):
+        gst.Element.__init__(self)
+
+        self.sinkpad = gst.Pad(self.sink_template)
+        self.sinkpad.set_chain_function(self.chain)
+        self.add_pad(self.sinkpad)
+
+        self.srcpad = gst.Pad(self.src_template)
+        self.add_pad(self.srcpad)
+
+        self._previous_frame = None
+
+
+    def chain(self, pad, buf):
+        if self._previous_frame is None:
+            self._previous_frame = buf
+            return gst.FLOW_OK
+
+        flow = self.optical_flow(self._previous_frame, buf)
+
+        pickled_flow = cPickle.dumps(flow, self.PICKLE_FORMAT)
+        new_buf = gst.Buffer (pickled_flow)
+        new_buf.stamp(buf)
+
+        self._previous_frame = buf
+
+        return self.srcpad.push(new_buf)
+
+    def _buf_of_flow(self, flow):
+        pickled_flow = cPickle.dumps(flow, self.PICKLE_FORMAT)
+        buf = gst.Buff
+
     def _features(self, img):
         img_size = cv.GetSize(img)
         eigImage = cv.CreateImage(img_size, cv.IPL_DEPTH_8U, 1)
