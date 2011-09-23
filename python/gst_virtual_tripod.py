@@ -34,11 +34,15 @@ MAX_COUNT = 20
 
 
 def img_of_buf(buf):
+    if buf is None:
+        return None
     struct = buf.caps[0]
     width = struct['width']
     height = struct['height']
-    channels = 1    # we only accept x-raw-gray for now
-    depth = 8       # depth=8 also in the caps
+    if struct.has_field('bpp'):
+        # yeah, we only support 8 bits per channel
+        channels = struct['bpp'] / 8
+        depth = 8
     img = cv.CreateImageHeader((width, height), depth, channels);
     cv.SetData (img, buf.data)
     return img
@@ -102,10 +106,6 @@ class OpticalFlowFinder(gst.Element):
 
         return self.srcpad.push(new_buf)
 
-    def _buf_of_flow(self, flow):
-        pickled_flow = cPickle.dumps(flow, self.PICKLE_FORMAT)
-        buf = gst.Buff
-
     def _features(self, img):
         img_size = cv.GetSize(img)
         eigImage = cv.CreateImage(img_size, cv.IPL_DEPTH_8U, 1)
@@ -129,7 +129,12 @@ class OpticalFlowFinder(gst.Element):
         return [ p for (status,p, err) in zip(flter, features, errors)
                     if status] # and err < admissible_error]
 
-    def optical_flow(self, img0, img1):
+    def optical_flow (self, buf0, buf1):
+        img0 = img_of_buf (buf0)
+        img1 = img_of_buf (buf1)
+        return self.img_optical_flow(img0, img1)
+
+    def img_optical_flow(self, img0, img1):
         """
         Return two sets of coordinates (c0, c1), in img0 and img1 respectively,
         such that c1[i] is the position in img1 of the feature that is at c0[i]
@@ -244,6 +249,8 @@ class OpticalFlowFinder(gst.Element):
         points0, points1 = self.better_optical_flow(img0, img1)
         return self.perspective_transform_from_points(points0, points1)
 
+gobject.type_register (OpticalFlowFinder)
+ret = gst.element_register (OpticalFlowFinder, 'opticalflowfinder')
 
 class OpticalFlowMuxer(gst.Element):
     """
@@ -264,11 +271,11 @@ class OpticalFlowMuxer(gst.Element):
         gst.Element.__init__(self)
 
         self.flow_sink_pad = gst.Pad(self.flow_sink_template)
-        self.flow_sink_pad.set_chain_function(self._flow_chain)
+        self.flow_sink_pad.set_chain_function(self._chain)
         self.add_pad(self.flow_sink_pad)
 
         self.main_sink_pad = gst.Pad(self.main_sink_template)
-        self.main_sink_pad.set_chain_function(self._main_chain)
+        self.main_sink_pad.set_chain_function(self._chain)
         self.add_pad(self.main_sink_pad)
 
         # FIXME: shouldn't we just use gstreamer queues outside of the elemnt?
@@ -291,7 +298,7 @@ class OpticalFlowMuxer(gst.Element):
             flow = cPickle.loads(flow_buf.data)
             buf = self._pending_main.popleft()
             if buf.timestamp == flow_buf.timestamp:
-                return mux(buf, flow)
+                return self.mux(buf, flow)
             else:
                 print "All going wrong!"
                 return gst.FLOW_ERROR
@@ -361,19 +368,51 @@ class SuccessiveImageTransformer(object):
 class ReferenceImageTransformer(SuccessiveImageTransformer):
     reference_is_first = True
 
-class OpticalFlowDrawer(ReferenceImageTransformer):
+class OpticalFlowDrawer(OpticalFlowMuxer):
+    __gstdetails__ = ("Optical flow drawer",
+                    "Filter/Video",
+                    "draw optical flow on frames",
+                    "Guillaume Emont")
+    main_sink_template = gst.PadTemplate ("mainsink",
+                                          gst.PAD_SINK,
+                                          gst.PAD_ALWAYS,
+                                          gst.Caps('video/x-raw-rgb,depth=24'))
+    src_template = gst.PadTemplate("src",
+                                    gst.PAD_SRC,
+                                    gst.PAD_ALWAYS,
+                                    gst.Caps('video/x-raw-rgb,depth=24'))
+    __gsttemplates__ = (OpticalFlowMuxer.flow_sink_template,
+                        main_sink_template,
+                        src_template)
+
+
     def __init__(self, *args, **kw):
         super(OpticalFlowDrawer, self).__init__(*args, **kw)
-        self._flow_finder = OpticalFlowFinder()
+
+        self.srcpad = gst.Pad(self.src_template)
+        self.add_pad(self.srcpad)
+
+
         self._drawer = ArrowDrawer()
 
-    def transform(self, img0, img0_transformed, img1):
-        origins, ends = self._flow_finder.better_optical_flow(img0, img1)
 
-        img_result = copy_img(img1)
-        self._drawer.draw_arrows(img_result, origins, ends)
+    def mux(self, buf, flow):
+        if flow is None:
+            return self.srcpad.push(buf)
+        origins, ends = flow
 
-        return img_result
+        img = img_of_buf(buf)
+
+        self._drawer.draw_arrows(img, origins, ends)
+
+        new_buf = buf_of_img(img, bufmodel=buf)
+
+        return self.srcpad.push(new_buf)
+
+
+gobject.type_register (OpticalFlowDrawer)
+ret = gst.element_register (OpticalFlowDrawer, 'opticalflowdrawer')
+
 
 class MotionCompensator(ReferenceImageTransformer):
     def __init__(self, *args, **kw):
