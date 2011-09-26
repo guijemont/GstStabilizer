@@ -72,6 +72,28 @@ class OpticalFlowFinder(gst.Element):
 
     PICKLE_FORMAT = 2
 
+    corner_count = gobject.property(type=int,
+                                 default=MAX_COUNT,
+                                 blurb='number of corners to detect')
+    corner_quality_level = gobject.property(type=float,
+                                            default=0.1,
+                                            blurb='Multiplier for the max/min eigenvalue; specifies the minimal accepted quality of image corners')
+    corner_min_distance = gobject.property(type=int,
+                                           default=200,
+                                           blurb='Limit, specifying the minimum possible distance between the detected corners; Euclidian distance is used')
+    win_size = gobject.property(type=int,
+                                default=30,
+                                blurb='Size of the search window of each pyramid level')
+    pyramid_level = gobject.property(type=int,
+                                     default=4,
+                                     blurb='Maximal pyramid level number. If 0 , pyramids are not used (single level), if 1 , two levels are used, etc')
+    max_iterations = gobject.property(type=int,
+                                      default=50,
+                                      blurb='maximum number of iterations to calculate optical flow')
+    epsilon = gobject.property(type=float,
+                                    default=0.001,
+                                    blurb='terminate when we reach that difference or smaller')
+
     def __init__(self):
         gst.Element.__init__(self)
 
@@ -102,11 +124,11 @@ class OpticalFlowFinder(gst.Element):
         eigImage = cv.CreateImage(img_size, cv.IPL_DEPTH_8U, 1)
         tempImage = cv.CreateImage(img_size, cv.IPL_DEPTH_8U, 1)
         features = cv.GoodFeaturesToTrack(img, eigImage, tempImage,
-                                          MAX_COUNT, #number of corners to detect
-                                          0.1, #Multiplier for the max/min
+                                          self.corner_count, #number of corners to detect
+                                          self.corner_quality_level, #Multiplier for the max/min
                                                 #eigenvalue; specifies the minimal
                                                 #accepted quality of image corners
-                                          200 # minimum distance between returned corners
+                                          self.corner_min_distance # minimum distance between returned corners
                                           )
 
         return cv.FindCornerSubPix(img, features, (10, 10), (-1, -1),
@@ -139,11 +161,11 @@ class OpticalFlowFinder(gst.Element):
         corners1, status, track_errors = cv.CalcOpticalFlowPyrLK (
                      img0, img1, None, None,
                      corners0,
-                     (30, 30), # win size
-                     4, # pyramid level
+                     (self.win_size,) * 2, # win size
+                     self.pyramid_level, # pyramid level
                      (cv.CV_TERMCRIT_ITER|cv.CV_TERMCRIT_EPS, # stop type
-                      50, # max iterations
-                      0.001), # min accuracy
+                      self.max_iterations, # max iterations
+                      self.epsilon), # min accuracy
                      0) # flags
 
         corners0 = self._filter_features(corners0, status, track_errors)
