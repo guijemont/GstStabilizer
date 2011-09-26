@@ -250,7 +250,10 @@ class ArrowDrawer(object):
         origin = int_pos(origin)
         end = int_pos(end)
         cv.Line(img, origin, end, color, width)
-        C, D = self._compute_arrow_points(origin, end)
+        points = self._compute_arrow_points(origin, end)
+        if points is None:
+            return
+        C, D = points
         cv.Line(img, end, C, color, width)
         cv.Line(img, end, D, color, width)
 
@@ -258,6 +261,8 @@ class ArrowDrawer(object):
         # The arrow tip is made by joining B (xb, yb) to C and D. This method
         # computes the coordinates of C and D.
         ab_distance = math.sqrt( (xb - xa)**2 + (yb-ya)**2)
+        if ab_distance == 0.:
+            return None
         cos_beta = (xa - xb) / ab_distance
         sin_beta = (ya - yb) / ab_distance
         cos_alpha = self.cos_alpha
