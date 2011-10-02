@@ -3,7 +3,7 @@ import glib,gobject,gst,sys
 
 from itertools import izip
 
-import numpy, math
+import numpy, math, array
 
 import cPickle
 from collections import deque
@@ -94,6 +94,19 @@ class OpticalFlowFinder(gst.Element):
                                     default=0.001,
                                     blurb='terminate when we reach that difference or smaller')
 
+    ignore_box_min_x = gobject.property(type=int,
+                                        default=-1,
+                                        blurb='left limit of the ignore box, deactivated if -1')
+    ignore_box_max_x = gobject.property(type=int,
+                                        default=-1,
+                                        blurb='right limit of the ignore box, deactivated if -1')
+    ignore_box_min_y = gobject.property(type=int,
+                                        default=-1,
+                                        blurb='top limit of the ignore box, deactivated if -1')
+    ignore_box_max_y = gobject.property(type=int,
+                                        default=-1,
+                                        blurb='top limit of the ignore box, deactivated if -1')
+
     def __init__(self):
         gst.Element.__init__(self)
 
@@ -106,8 +119,23 @@ class OpticalFlowFinder(gst.Element):
 
         self._previous_frame = None
 
+        self._mask = None
+
 
     def chain(self, pad, buf):
+
+        if self._mask is None and self._has_ignore_box():
+            # we consider the buffer height and width are constant, the whole
+            # algorithm depends on it anyway. Shouldn't we enforce that somewhere?
+            caps_struct = buf.get_caps()[0]
+            height = caps_struct['height']
+            width = caps_struct['width']
+            self._mask = cv.CreateMatHeader(height, width, cv.CV_8UC1)
+            data = array.array('B', '\1' * width * height)
+            for x in xrange(self.ignore_box_min_x, self.ignore_box_max_x + 1):
+                for y in xrange(self.ignore_box_min_y, self.ignore_box_max_y + 1):
+                    data[y*height + x] = 0
+            cv.SetData(self._mask, data.tostring())
 
         flow = self.optical_flow(self._previous_frame, buf)
 
@@ -123,12 +151,15 @@ class OpticalFlowFinder(gst.Element):
         img_size = cv.GetSize(img)
         eigImage = cv.CreateImage(img_size, cv.IPL_DEPTH_8U, 1)
         tempImage = cv.CreateImage(img_size, cv.IPL_DEPTH_8U, 1)
+
+        mask = None
         features = cv.GoodFeaturesToTrack(img, eigImage, tempImage,
                                           self.corner_count, #number of corners to detect
                                           self.corner_quality_level, #Multiplier for the max/min
                                                 #eigenvalue; specifies the minimal
                                                 #accepted quality of image corners
-                                          self.corner_min_distance # minimum distance between returned corners
+                                          self.corner_min_distance, # minimum distance between returned corners
+                                          mask=self._mask
                                           )
 
         return cv.FindCornerSubPix(img, features, (10, 10), (-1, -1),
@@ -140,7 +171,14 @@ class OpticalFlowFinder(gst.Element):
         #n = len(filtered_errors) / 2 # we want to keep the best third only
         #admissible_error = sorted(filtered_errors)[n]
         return [ p for (status,p, err) in zip(flter, features, errors)
-                    if status] # and err < admissible_error]
+                    if status and not self._in_ignore_box(p)] # and err < admissible_error]
+
+    def _has_ignore_box(self):
+        return (-1) not in (self.ignore_box_min_x, self.ignore_box_max_x,
+                            self.ignore_box_min_y, self.ignore_box_max_y)
+
+    def _in_ignore_box(self, (x, y)):
+        return self._has_ignore_box() and x >= self.ignore_box_min_x and x <= self.ignore_box_max_x and y >= self.ignore_box_min_y and y <= self.ignore_box_max_y
 
     def optical_flow(self, buf0, buf1):
         """
