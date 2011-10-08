@@ -9,7 +9,7 @@ import cv
 
 from cv_gst_util import *
 
-import cv_flow_finder
+from cv_flow_finder import LucasKanadeFinder, HornSchunckFinder
 
 
 class OpticalFlowFinder(gst.Element):
@@ -30,6 +30,10 @@ class OpticalFlowFinder(gst.Element):
     __gsttemplates__ = (sink_template, src_template)
 
     PICKLE_FORMAT = 2
+
+    # Algorithms to chose from:
+    HORN_SCHUNCK = 0
+    LUCAS_KANADE = 1
 
     corner_count = gobject.property(type=int,
                                  default=20,
@@ -66,6 +70,16 @@ class OpticalFlowFinder(gst.Element):
                                         default=-1,
                                         blurb='top limit of the ignore box, deactivated if -1')
 
+    algorithm = gobject.property(type=int,
+                                 default=HORN_SCHUNCK,
+                                 blurb= """algorithm to use:
+                                 %d: Horn Schunk (dense, slow)
+                                 %d: Lucas Kanade (discreet, faster, more precise, not good for big changes between frames) """ % (HORN_SCHUNCK, LUCAS_KANADE))
+    hs_resize_ratio = gobject.property(type=int,
+                                       default=5,
+                                       blurb="When using Horn Schunk, you can accelerate things by resizing the image. This the ratio by which to divide the image. It must be a divisor of the width _and_ height of the frames")
+
+
     def __init__(self):
         gst.Element.__init__(self)
 
@@ -78,18 +92,25 @@ class OpticalFlowFinder(gst.Element):
 
         self._previous_frame = None
 
-        self._finder = cv_flow_finder.LucasKanadeFinder(self.corner_count,
-                                                        self.corner_quality_level,
-                                                        self.corner_min_distance,
-                                                        self.win_size,
-                                                        self.pyramid_level,
-                                                        self.max_iterations,
-                                                        self.epsilon)
+        if self.algorithm == self.LUCAS_KANADE:
+            self._finder = LucasKanadeFinder(self.corner_count,
+                                             self.corner_quality_level,
+                                             self.corner_min_distance,
+                                             self.win_size,
+                                             self.pyramid_level,
+                                             self.max_iterations,
+                                             self.epsilon)
+        elif self.algorithm == self.HORN_SCHUNCK:
+            self._finder = HornSchunckFinder(self.hs_resize_ratio)
+        else:
+            raise ValueError("Unknown algorithm")
 
 
     def chain(self, pad, buf):
 
-        if self._finder.mask is None and self._has_ignore_box():
+        if self.algorithm == self.LUCAS_KANADE \
+                           and self._finder.mask is None \
+                           and self._has_ignore_box():
             # we consider the buffer height and width are constant, the whole
             # algorithm depends on it anyway. Shouldn't we enforce that somewhere?
             caps_struct = buf.get_caps()[0]

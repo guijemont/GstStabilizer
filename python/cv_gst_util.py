@@ -31,3 +31,8 @@ def gray_scale(img):
     cv.CvtColor(img, new_img, cv.CV_RGB2GRAY)
     return new_img
 
+def resize(img, new_width, new_height):
+    new_img = cv.CreateImage((new_width, new_height), img.depth, img.channels)
+    cv.Resize(img, new_img)
+    return new_img
+
