@@ -78,13 +78,13 @@ class OpticalFlowFinder(gst.Element):
 
         self._previous_frame = None
 
-        self._finder = cv_flow_finder.Finder(self.corner_count,
-                                             self.corner_quality_level,
-                                             self.corner_min_distance,
-                                             self.win_size,
-                                             self.pyramid_level,
-                                             self.max_iterations,
-                                             self.epsilon)
+        self._finder = cv_flow_finder.LucasKanadeFinder(self.corner_count,
+                                                        self.corner_quality_level,
+                                                        self.corner_min_distance,
+                                                        self.win_size,
+                                                        self.pyramid_level,
+                                                        self.max_iterations,
+                                                        self.epsilon)
 
 
     def chain(self, pad, buf):

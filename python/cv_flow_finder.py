@@ -6,7 +6,7 @@ import cv
 
 from cv_gst_util import *
 
-class Finder(object):
+class LucasKanadeFinder(object):
     def __init__(self, corner_count,
                        corner_quality_level,
                        corner_min_distance,
@@ -16,7 +16,7 @@ class Finder(object):
                        epsilon,
                        *args, **kw):
 
-        super(Finder, self).__init__(*args, **kw)
+        super(LucasKanadeFinder, self).__init__(*args, **kw)
 
         self.corner_count = corner_count
         self.corner_quality_level = corner_quality_level
