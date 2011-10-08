@@ -26,3 +26,8 @@ def buf_of_img(img, bufmodel=None):
         buf.offset_end = bufmodel.offset_end
     return buf
 
+def gray_scale(img):
+    new_img = cv.CreateImage(cv.GetSize(img), cv.IPL_DEPTH_8U, 1)
+    cv.CvtColor(img, new_img, cv.CV_RGB2GRAY)
+    return new_img
+
