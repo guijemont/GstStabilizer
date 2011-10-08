@@ -40,6 +40,9 @@ class Finder(object):
         img0 = img_of_buf(buf0)
         img1 = img_of_buf(buf1)
 
+        return self.optical_flow_img(img0, img1)
+
+    def optical_flow_img(self, img0, img1):
         corners0 = self._features(img0)
 
         print "found %d features" % len(corners0)
