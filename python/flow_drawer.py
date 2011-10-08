@@ -15,24 +15,28 @@ class ArrowDrawer(object):
     cos_alpha = math.cos(alpha)
     sin_alpha = math.sin(alpha)
 
+    def __init__(self, width=2, *args, **kw):
+        super(ArrowDrawer, self).__init__(*args, **kw)
+
+        self._width = width
+
     def draw_arrows(self, img, origins, ends):
         for origin, end in zip(origins, ends):
             self.draw_arrow(img, origin, end)
 
     def draw_arrow(self, img, origin, end):
         color = (255, 0, 0)
-        width = 2
         def int_pos((x,y)):
             return (int(x), int(y))
         origin = int_pos(origin)
         end = int_pos(end)
-        cv.Line(img, origin, end, color, width)
+        cv.Line(img, origin, end, color, self._width)
         points = self._compute_arrow_points(origin, end)
         if points is None:
             return
         C, D = points
-        cv.Line(img, end, C, color, width)
-        cv.Line(img, end, D, color, width)
+        cv.Line(img, end, C, color, self._width)
+        cv.Line(img, end, D, color, self._width)
 
     def _compute_arrow_points(self, (xa, ya), (xb, yb), length=20.):
         # The arrow tip is made by joining B (xb, yb) to C and D. This method
@@ -69,6 +73,9 @@ class OpticalFlowDrawer(OpticalFlowMuxer):
                         main_sink_template,
                         src_template)
 
+    line_thickness = gobject.property(type=int,
+                                      default=2,
+                                      blurb='thickness of the lines used to draw the arrow')
 
     def __init__(self, *args, **kw):
         super(OpticalFlowDrawer, self).__init__(*args, **kw)
@@ -77,7 +84,7 @@ class OpticalFlowDrawer(OpticalFlowMuxer):
         self.add_pad(self.srcpad)
 
 
-        self._drawer = ArrowDrawer()
+        self._drawer = ArrowDrawer(width=self.line_thickness)
 
 
     def mux(self, buf, flow):
