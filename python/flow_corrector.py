@@ -6,7 +6,7 @@ from cv_gst_util import *
 
 from flow_muxer import OpticalFlowMuxer
 
-import cv_flow_finder
+from cv_flow_finder import LucasKanadeFinder, HornSchunckFinder
 
 
 class OpticalFlowCorrector(gst.Element):
@@ -23,6 +23,10 @@ class OpticalFlowCorrector(gst.Element):
                                     gst.PAD_ALWAYS,
                                     gst.Caps('video/x-raw-rgb,depth=24'))
     __gsttemplates__ = (sink_template, src_template)
+
+    # Algorithms to chose from:
+    HORN_SCHUNCK = 0
+    LUCAS_KANADE = 1
 
     corner_count = gobject.property(type=int,
                                  default=20,
@@ -58,6 +62,14 @@ class OpticalFlowCorrector(gst.Element):
     ignore_box_max_y = gobject.property(type=int,
                                         default=-1,
                                         blurb='top limit of the ignore box, deactivated if -1')
+    algorithm = gobject.property(type=int,
+                                 default=LUCAS_KANADE,
+                                 blurb= """algorithm to use:
+                                 %d: Horn Schunk (dense, slow)
+                                 %d: Lucas Kanade (discreet, faster, more precise, not good for big changes between frames) """ % (HORN_SCHUNCK, LUCAS_KANADE))
+    hs_resize_ratio = gobject.property(type=int,
+                                       default=5,
+                                       blurb="When using Horn Schunk, you can accelerate things by resizing the image. This the ratio by which to divide the image. It must be a divisor of the width _and_ height of the frames")
 
     def __init__(self, *args, **kw):
         super(OpticalFlowCorrector, self).__init__(*args, **kw)
@@ -71,18 +83,33 @@ class OpticalFlowCorrector(gst.Element):
 
         self._reference_img = None
 
-        self._finder = cv_flow_finder.LucasKanadeFinder(self.corner_count,
-                                                        self.corner_quality_level,
-                                                        self.corner_min_distance,
-                                                        self.win_size,
-                                                        self.pyramid_level,
-                                                        self.max_iterations,
-                                                        self.epsilon)
+        self._finder = None
+
+    def _create_finder(self):
+
+        if self.algorithm == self.LUCAS_KANADE:
+            finder = LucasKanadeFinder(self.corner_count,
+                                             self.corner_quality_level,
+                                             self.corner_min_distance,
+                                             self.win_size,
+                                             self.pyramid_level,
+                                             self.max_iterations,
+                                             self.epsilon)
+        elif self.algorithm == self.HORN_SCHUNCK:
+            finder = HornSchunckFinder(self.hs_resize_ratio)
+        else:
+            raise ValueError("Unknown algorithm")
+        return finder
 
     def _chain(self, pad, buf):
         if self._reference_img is None:
             self._reference_img = img_of_buf(buf)
             return self.srcpad.push(buf)
+
+        if self._finder is None:
+            self._finder = self._create_finder()
+
+        print "-- buf timestamp: %.4f" % (buf.timestamp/float(gst.SECOND))
 
         flow = self._get_flow(buf)
         if flow is None:
@@ -93,7 +120,8 @@ class OpticalFlowCorrector(gst.Element):
 
             img = img_of_buf(buf)
             new_img = cv.CreateImage((img.width, img.height), cv.IPL_DEPTH_8U, 3)
-            cv.WarpPerspective(img, new_img, transform, cv.CV_WARP_INVERSE_MAP)
+            cv.WarpPerspective(img, new_img, transform,
+                               cv.CV_WARP_INVERSE_MAP | cv.CV_WARP_FILL_OUTLIERS)
 
             new_buf = buf_of_img(new_img, bufmodel=buf)
             #self._reference_img = img_of_buf(new_buf)
@@ -121,7 +149,9 @@ class OpticalFlowCorrector(gst.Element):
 
     def _get_flow(self, buf):
 
-        if self._finder.mask is None and self._has_ignore_box():
+        if self.algorithm == self.LUCAS_KANADE \
+                           and self._finder.mask is None \
+                           and self._has_ignore_box():
             # we consider the buffer height and width are constant, the whole
             # algorithm depends on it anyway. Shouldn't we enforce that somewhere?
             caps_struct = buf.get_caps()[0]
