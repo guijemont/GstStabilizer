@@ -2,9 +2,13 @@
 
 from itertools import izip
 
-import cv
+import cv, cv2
+
+import numpy
 
 from cv_gst_util import *
+
+FLANN_INDEX_KDTREE = 1  # bug: flann enums are missing
 
 class Finder(object):
     def __init__(self, *args, **kw):
@@ -152,3 +156,77 @@ class HornSchunckFinder(Finder):
             l.append((x * self.resize_ratio + self.resize_ratio / 2,
                       y * self.resize_ratio + self.resize_ratio / 2))
         return l
+
+class SURFFinder(Finder):
+    def __init__(self, *args, **kw):
+        super(SURFFinder, self).__init__(*args, **kw)
+        self._mem_storage = cv.CreateMemStorage()
+        self._surf = cv2.SURF(1000)
+
+    def get_surf(self, img):
+        # returns  (keypoints, descriptors) where:
+        # - keypoints is a list of ((x, y), laplacian, size, direction, hessian)
+        # - descriptor is a cvSeq (kinda list?) of lists of 128 floats each
+        #return self._surf.detect(img, None)
+        return cv.ExtractSURF(img, None, self._mem_storage, (1, 500, 3, 4))
+
+    def optical_flow_img(self, img0, img1):
+        surf_keypoints0, surf_keypoints1 = self.matching_surf_keypoints(img0, img1)
+
+        print "found %d matches" % len(surf_keypoints0)
+
+        def surf_to_normal_point_list(surf_kp_list):
+            return [p[0] for p in surf_kp_list]
+
+        keypoints0 = surf_to_normal_point_list(surf_keypoints0)
+        keypoints0 = self._refine_points(img0, keypoints0)
+        keypoints1 = surf_to_normal_point_list(surf_keypoints1)
+        keypoints1 = self._refine_points(img1, keypoints1)
+
+        return keypoints0, keypoints1
+
+    def matching_surf_keypoints(self, img0, img1):
+        # return a pair of list of SURF keypoints that are supposed to match
+        # each other. SURF keypoints are in a tuple of the following format:
+        # ((x, y), laplacian, size, dir, hessian)
+
+        keypoints0, descriptors0 = self.get_surf(img0)
+        keypoints1, descriptors1 = self.get_surf(img1)
+
+        indices = self._find_neighbours(descriptors0, descriptors1)
+
+        (result_keypoints0, result_keypoints1) = ([], [])
+        for idx0, idx1 in indices:
+            result_keypoints0.append(keypoints0[idx0])
+            result_keypoints1.append(keypoints1[idx1])
+
+        return result_keypoints0, result_keypoints1
+
+    def _refine_points(self, img, points):
+        return cv.FindCornerSubPix(img, points, (10, 10), (-1, -1),
+                                   (cv.CV_TERMCRIT_ITER | cv.CV_TERMCRIT_EPS,
+                                    20, 0.03))
+
+    def _find_neighbours(self, descriptors0, descriptors1):
+        # return a list of pairs (idx0, idx1) such that descriptors0[idx0] is
+        # very likely to describe the same feature as descriptors1[idx1]
+        # using the same params as the find_obj.cpp demo from opencv
+
+        haystack = numpy.asarray(descriptors0, dtype=numpy.float32)
+        needles = numpy.asarray(descriptors1, dtype=numpy.float32)
+
+        # FIXME: have that an instance member when we match against first pic
+        flann = cv2.flann_Index(haystack,
+                                {'algorithm': FLANN_INDEX_KDTREE,
+                                'trees': 4})
+        indices, dists = flann.knnSearch(needles, 2, params={})
+        # descriptors0[indices[i][0]] <-> descriptors1[i]
+
+        result = []
+
+        for i, flann_idx, (small_dist, big_dist) in izip(xrange(len(needles)),
+                                                         indices,
+                                                         dists):
+            if small_dist < big_dist * 0.6:
+                result.append((flann_idx[0], i))
+        return result

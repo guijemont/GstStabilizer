@@ -6,7 +6,7 @@ from cv_gst_util import *
 
 from flow_muxer import OpticalFlowMuxer
 
-from cv_flow_finder import LucasKanadeFinder, HornSchunckFinder
+from cv_flow_finder import LucasKanadeFinder, HornSchunckFinder, SURFFinder
 
 
 class OpticalFlowCorrector(gst.Element):
@@ -27,6 +27,7 @@ class OpticalFlowCorrector(gst.Element):
     # Algorithms to chose from:
     HORN_SCHUNCK = 0
     LUCAS_KANADE = 1
+    SURF = 2
 
     corner_count = gobject.property(type=int,
                                  default=20,
@@ -66,7 +67,8 @@ class OpticalFlowCorrector(gst.Element):
                                  default=LUCAS_KANADE,
                                  blurb= """algorithm to use:
                                  %d: Horn Schunk (dense, slow)
-                                 %d: Lucas Kanade (discreet, faster, more precise, not good for big changes between frames) """ % (HORN_SCHUNCK, LUCAS_KANADE))
+                                 %d: Lucas Kanade (discreet, faster, more precise, not good for big changes between frames)
+                                 %d: SURF (Speeded Up Robust Feature, finds features, finds them again)""" % (HORN_SCHUNCK, LUCAS_KANADE, SURF))
     hs_resize_ratio = gobject.property(type=int,
                                        default=5,
                                        blurb="When using Horn Schunk, you can accelerate things by resizing the image. This the ratio by which to divide the image. It must be a divisor of the width _and_ height of the frames")
@@ -97,6 +99,8 @@ class OpticalFlowCorrector(gst.Element):
                                              self.epsilon)
         elif self.algorithm == self.HORN_SCHUNCK:
             finder = HornSchunckFinder(self.hs_resize_ratio)
+        elif self.algorithm == self.SURF:
+            finder = SURFFinder()
         else:
             raise ValueError("Unknown algorithm")
         return finder
