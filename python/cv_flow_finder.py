@@ -31,13 +31,13 @@ class Finder(object):
 
 
 class LucasKanadeFinder(Finder):
-    def __init__(self, corner_count,
-                       corner_quality_level,
-                       corner_min_distance,
-                       win_size,
-                       pyramid_level,
-                       max_iterations,
-                       epsilon,
+    def __init__(self, corner_count=20,
+                       corner_quality_level=0.1,
+                       corner_min_distance=200,
+                       win_size=30,
+                       pyramid_level=4,
+                       max_iterations=50,
+                       epsilon=0.001,
                        *args, **kw):
 
         super(LucasKanadeFinder, self).__init__(*args, **kw)
@@ -105,7 +105,7 @@ class LucasKanadeFinder(Finder):
 
 
 class HornSchunckFinder(Finder):
-    def __init__(self, resize_ratio, *args, **kw):
+    def __init__(self, resize_ratio=5, *args, **kw):
         super(HornSchunckFinder, self).__init__(*args, **kw)
 
         self.resize_ratio = resize_ratio
