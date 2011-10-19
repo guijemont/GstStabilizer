@@ -147,7 +147,9 @@ class OpticalFlowCorrector(gst.Element):
         mat1 = self._mat_of_point_list (points1)
         transform = cv.CreateMat(3, 3, cv.CV_64F)
 
-        cv.FindHomography(mat0, mat1, transform)
+        cv.FindHomography(mat0, mat1, transform,
+                          method=cv.CV_RANSAC,
+                          ransacReprojThreshold=3)
 
         return transform
 
