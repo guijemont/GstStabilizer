@@ -327,5 +327,17 @@ class FinderDemo(object):
 
 if __name__ == '__main__':
     import sys
-    demo = FinderDemo(SURFFinder(), *sys.argv[1:])
-    demo.demo()
+    algorithm = sys.argv[1]
+    if algorithm == 'HS':
+        finder = HornSchunckFinder(period=40)
+    elif algorithm == 'LK':
+        finder = LucasKanadeFinder()
+    elif algorithm == 'SURF':
+        finder = SURFFinder()
+    else:
+        print "Uknown algorithm!"
+        syntax()
+
+    if finder:
+        demo = FinderDemo(finder, *sys.argv[2:])
+        demo.demo()
