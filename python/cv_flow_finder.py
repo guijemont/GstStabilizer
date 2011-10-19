@@ -188,7 +188,7 @@ class SURFFinder(Finder):
             if len(img.shape)==3 and img.shape[2] > 1:
                 img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
             img = cv.fromarray(img)
-        return cv.ExtractSURF(img, None, self._mem_storage, (1, 3000, 3, 4))
+        return cv.ExtractSURF(img, None, self._mem_storage, (1, 1000, 3, 4))
 
     def optical_flow_img(self, img0, img1):
         surf_keypoints0, surf_keypoints1, dists = self.matching_surf_keypoints(img0, img1)
