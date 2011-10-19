@@ -128,11 +128,11 @@ class OpticalFlowCorrector(gst.Element):
                                cv.CV_WARP_INVERSE_MAP | cv.CV_WARP_FILL_OUTLIERS)
 
             new_buf = buf_of_img(new_img, bufmodel=buf)
-            #self._reference_img = img_of_buf(new_buf)
+            self._reference_img = img_of_buf(new_buf)
             return self.srcpad.push(new_buf)
         except cv.error,e :
             print "got an opencv error (%s), not applying any transform for this frame" % e.message
-            #self._reference_img = img_of_buf(buf)
+            self._reference_img = img_of_buf(buf)
             return self.srcpad.push(buf)
 
     def _mat_of_point_list(self, points):
