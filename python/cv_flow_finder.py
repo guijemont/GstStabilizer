@@ -287,7 +287,7 @@ class SURFFinder(Finder):
         for i, flann_idx, (small_dist, big_dist) in izip(xrange(len(needles)),
                                                          indices,
                                                          dists):
-            if small_dist < 0.1 and small_dist < big_dist * 0.6:
+            if small_dist < big_dist * 0.6:
                 result.append((flann_idx[0], i))
                 result_dists.append(small_dist)
         return result, result_dists
