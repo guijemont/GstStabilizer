@@ -41,3 +41,11 @@ def resize(img, new_width, new_height):
     cv.Resize(img, new_img)
     return new_img
 
+
+def numpy_to_iplimg(image):
+    ipl_image = cv.CreateImageHeader((image.shape[1], image.shape[0]),
+                                     image.dtype.itemsize * 8,
+                                     image.shape[2])
+    cvmat = cv.fromarray(image)
+    cv.SetData(ipl_image, cvmat.tostring())
+    return ipl_image
