@@ -111,10 +111,11 @@ class LucasKanadeFinder(Finder):
 
 
 class HornSchunckFinder(Finder):
-    def __init__(self, resize_ratio=5, *args, **kw):
+    def __init__(self, resize_ratio=5, period=1, *args, **kw):
         super(HornSchunckFinder, self).__init__(*args, **kw)
 
         self.resize_ratio = resize_ratio
+        self.period = period
 
     def optical_flow_img(self, img0, img1):
         if isinstance(img0, numpy.ndarray):
@@ -154,10 +155,11 @@ class HornSchunckFinder(Finder):
         # we take only one vector in 100, because we don't need that crazy
         # density
         # FIXME: make this configurable
-        for y in xrange(0,height,10):
-            for x in xrange(0,width,10):
-                origin.append((x, y))
-                dest.append((x + velx[y,x], y + vely[y,x]))
+        for y in xrange(0,height):
+            for x in xrange(0,width):
+                if random.randint(1, self.period**2) == 1:
+                    origin.append((x, y))
+                    dest.append((x + velx[y,x], y + vely[y,x]))
 
         return origin, dest
 
