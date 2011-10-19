@@ -53,6 +53,11 @@ class LucasKanadeFinder(Finder):
         self.mask = None
 
     def optical_flow_img(self, img0, img1):
+        if isinstance(img0, numpy.ndarray):
+            img0 = numpy_to_iplimg(img0)
+            img1 = numpy_to_iplimg(img1)
+        img0 = gray_scale(img0)
+        img1 = gray_scale(img1)
         corners0 = self._features(img0)
 
         n_features = len(corners0)
@@ -111,11 +116,18 @@ class HornSchunckFinder(Finder):
         self.resize_ratio = resize_ratio
 
     def optical_flow_img(self, img0, img1):
+        if isinstance(img0, numpy.ndarray):
+            img0 = numpy_to_iplimg(img0)
+            img1 = numpy_to_iplimg(img1)
+
         assert(img0.width % self.resize_ratio == 0)
         assert(img0.height % self.resize_ratio == 0)
 
         width = img0.width / self.resize_ratio
         height = img0.height / self.resize_ratio
+
+        img0 = gray_scale(img0)
+        img1 = gray_scale(img1)
 
         small_img0 = resize(img0, width, height)
         small_img1 = resize(img1, width, height)
