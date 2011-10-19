@@ -77,9 +77,10 @@ class LucasKanadeFinder(Finder):
         track_errors = self._filter_features(track_errors, status)
 
         print "%d features found, %d matched"  % (n_features, len(corners0)), ';',
-        print "errors min/max/avg:", (min(track_errors),
-                                      max(track_errors),
-                                      sum(track_errors)/len(track_errors))
+        if len(track_errors):
+            print "errors min/max/avg:", (min(track_errors),
+                                          max(track_errors),
+                                          sum(track_errors)/len(track_errors))
 
         return (corners0, corners1)
 
