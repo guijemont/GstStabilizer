@@ -31,9 +31,9 @@ class Finder(object):
 
 
 class LucasKanadeFinder(Finder):
-    def __init__(self, corner_count=20,
+    def __init__(self, corner_count=50,
                        corner_quality_level=0.1,
-                       corner_min_distance=200,
+                       corner_min_distance=50,
                        win_size=30,
                        pyramid_level=4,
                        max_iterations=50,

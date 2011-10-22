@@ -30,13 +30,13 @@ class OpticalFlowCorrector(gst.Element):
     SURF = 2
 
     corner_count = gobject.property(type=int,
-                                 default=20,
+                                 default=50,
                                  blurb='number of corners to detect')
     corner_quality_level = gobject.property(type=float,
                                             default=0.1,
                                             blurb='Multiplier for the max/min eigenvalue; specifies the minimal accepted quality of image corners')
     corner_min_distance = gobject.property(type=int,
-                                           default=200,
+                                           default=50,
                                            blurb='Limit, specifying the minimum possible distance between the detected corners; Euclidian distance is used')
     win_size = gobject.property(type=int,
                                 default=30,
