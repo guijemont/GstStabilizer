@@ -56,8 +56,9 @@ class LucasKanadeFinder(Finder):
         if isinstance(img0, numpy.ndarray):
             img0 = numpy_to_iplimg(img0)
             img1 = numpy_to_iplimg(img1)
-        img0 = gray_scale(img0)
-        img1 = gray_scale(img1)
+        if img0.channels > 1:
+            img0 = gray_scale(img0)
+            img1 = gray_scale(img1)
         corners0 = self._features(img0)
 
         n_features = len(corners0)
@@ -128,8 +129,9 @@ class HornSchunckFinder(Finder):
         width = img0.width / self.resize_ratio
         height = img0.height / self.resize_ratio
 
-        img0 = gray_scale(img0)
-        img1 = gray_scale(img1)
+        if img0.channels > 1:
+            img0 = gray_scale(img0)
+            img1 = gray_scale(img1)
 
         small_img0 = resize(img0, width, height)
         small_img1 = resize(img1, width, height)
