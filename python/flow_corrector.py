@@ -84,6 +84,7 @@ class OpticalFlowCorrector(gst.Element):
         self.add_pad(self.sinkpad)
 
         self._reference_img = None
+        self._reference_blob = None
 
         self._finder = None
 
@@ -108,6 +109,7 @@ class OpticalFlowCorrector(gst.Element):
     def _chain(self, pad, buf):
         if self._reference_img is None:
             self._reference_img = img_of_buf(buf)
+            self._reference_blob = None
             return self.srcpad.push(buf)
 
         if self._finder is None:
@@ -115,7 +117,7 @@ class OpticalFlowCorrector(gst.Element):
 
         print "-- buf timestamp: %.4f" % (buf.timestamp/float(gst.SECOND))
 
-        flow = self._get_flow(buf)
+        flow,blob = self._get_flow(buf)
         if flow is None:
             return self.srcpad.push(buf)
 
@@ -129,10 +131,12 @@ class OpticalFlowCorrector(gst.Element):
 
             new_buf = buf_of_img(new_img, bufmodel=buf)
             self._reference_img = img_of_buf(new_buf)
+            self._reference_blob = self._finder.warp_blob(blob, transform)
             return self.srcpad.push(new_buf)
         except cv.error,e :
             print "got an opencv error (%s), not applying any transform for this frame" % e.message
             self._reference_img = img_of_buf(buf)
+            self._reference_blob = None
             return self.srcpad.push(buf)
 
     def _mat_of_point_list(self, points):
@@ -174,7 +178,8 @@ class OpticalFlowCorrector(gst.Element):
         gray_img = gray_scale(color_img)
         gray_ref_img = gray_scale(self._reference_img)
 
-        return self._finder.optical_flow_img(gray_ref_img, gray_img)
+        return self._finder.optical_flow_img(gray_ref_img, gray_img,
+                                             self._reference_blob)
 
     def _has_ignore_box(self):
         return (-1) not in (self.ignore_box_min_x, self.ignore_box_max_x,
