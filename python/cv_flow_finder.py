@@ -66,7 +66,7 @@ class LucasKanadeFinder(Finder):
             img0 = gray_scale(img0)
             img1 = gray_scale(img1)
 
-        if blob_buf0 is not None:
+        if blob_buf0 is not None and len(blob_buf0) > self.corner_count / 2:
             corners0 = blob_buf0
         else:
             corners0 = self._features(img0)
