@@ -15,20 +15,22 @@ class Finder(object):
     def __init__(self, *args, **kw):
         super(Finder, self).__init__(*args, **kw)
 
-    def optical_flow(self, buf0, buf1):
+    def optical_flow(self, buf0, buf1, blob_buf0=None):
         """
-        Return two sets of coordinates (c0, c1), in buf0 and buf1 respectively,
-        such that c1[i] is the position in buf1 of the feature that is at c0[i]
-        in buf0.
+        Returns the flow and the blob for buf1
         """
         if buf0 is None:
-            return None
+            return None,None
 
         img0 = img_of_buf(buf0)
         img1 = img_of_buf(buf1)
+        return self.optical_flow_img(img0, img1, blob_buf0)
 
-        return self.optical_flow_img(img0, img1)
+    def optical_flow_img(self, img0, img1, blob_buf0=None):
+        raise NotImplementedError()
 
+    def warp_blob(self, blob, transform_matrix):
+        raise NotImplementedError()
 
 class LucasKanadeFinder(Finder):
     def __init__(self, corner_count=50,
