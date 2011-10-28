@@ -1,6 +1,7 @@
 import gobject,gst
 
 import cv2
+import numpy
 
 from cv_gst_util import *
 
@@ -67,6 +68,9 @@ class OpticalFlowCorrector(gst.Element):
                                  blurb= """algorithm to use:
                                  %d: Lucas Kanade (discreet, fast, precise, not good for big changes between frames)
                                  %d: SURF (Speeded Up Robust Feature, finds features, finds them again)""" % (LUCAS_KANADE, SURF))
+    multiply_transforms = gobject.property(type=bool,
+                                           default=False,
+                                           blurb='whether to multiply transform matrices, or to compare transformed images instead)')
 
     def __init__(self, *args, **kw):
         super(OpticalFlowCorrector, self).__init__(*args, **kw)
@@ -80,6 +84,11 @@ class OpticalFlowCorrector(gst.Element):
 
         self._reference_img = None
         self._reference_blob = None
+        self._last_output_img = None
+        self._reference_transform = numpy.asarray([[1., 0., 0.],
+                                                   [0., 1., 0.],
+                                                   [0., 0., 1.]],
+                                                   dtype=numpy.float64)
 
         self._finder = None
 
@@ -102,6 +111,7 @@ class OpticalFlowCorrector(gst.Element):
     def _chain(self, pad, buf):
         if self._reference_img is None:
             self._reference_img = img_of_buf(buf)
+            self._last_output_img = self._reference_img
             self._reference_blob = None
             return self.srcpad.push(buf)
 
@@ -117,18 +127,31 @@ class OpticalFlowCorrector(gst.Element):
         try:
             transform = self._perspective_transform_from_flow(flow)
 
+            if self.props.multiply_transforms:
+                # since we get the flow between original frames, we need to
+                # accumulate the transformations
+                self._reference_transform = \
+                    self._reference_transform.dot(transform)
+            else:
+                self._reference_transform = transform
+
             img = img_of_buf(buf)
 
-            new_img = self._reference_img.copy()
+            new_img = self._last_output_img.copy()
             
-            new_img = cv2.warpPerspective(img, transform,
+            new_img = cv2.warpPerspective(img, self._reference_transform,
                                           (img.shape[1], img.shape[0]),
                                           dst=new_img,
                                           flags=cv2.WARP_INVERSE_MAP, borderMode=cv2.BORDER_TRANSPARENT)
 
             new_buf = buf_of_img(new_img, bufmodel=buf)
-            self._reference_img = new_img
-            self._reference_blob = self._finder.warp_blob(blob, transform)
+            if self.props.multiply_transforms:
+                self._reference_img = img
+                self._reference_blob = blob
+            else:
+                self._reference_img = new_img
+                self._reference_blob = self._finder.warp_blob(blob, transform)
+            self._last_output_img = new_img
             return self.srcpad.push(new_buf)
         except cv2.error,e :
             print "got an opencv error (%s), not applying any transform for this frame" % e.message
