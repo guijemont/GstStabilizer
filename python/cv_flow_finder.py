@@ -54,14 +54,22 @@ class LucasKanadeFinder(Finder):
 
         self.mask = None
 
-    def optical_flow_img(self, img0, img1):
+    def optical_flow_img(self, img0, img1, blob_buf0=None):
+        # for us, blob_buf0 is in the format:
+        # corners
+        # for now.
+        # TODO: add pyramid?
         if isinstance(img0, numpy.ndarray):
             img0 = numpy_to_iplimg(img0)
             img1 = numpy_to_iplimg(img1)
         if img0.channels > 1:
             img0 = gray_scale(img0)
             img1 = gray_scale(img1)
-        corners0 = self._features(img0)
+
+        if blob_buf0 is not None:
+            corners0 = blob_buf0
+        else:
+            corners0 = self._features(img0)
 
         n_features = len(corners0)
 
@@ -85,7 +93,18 @@ class LucasKanadeFinder(Finder):
                                           max(track_errors),
                                           sum(track_errors)/len(track_errors))
 
-        return (corners0, corners1)
+        return ((corners0, corners1), corners1)
+
+    def warp_blob(self, blob, transform_matrix):
+        _, invert_transform = cv2.invert(numpy.asarray(transform_matrix))
+        blob_array = numpy.asarray(blob)
+        shape = (blob_array.shape[0], 3)
+        extended_blob_array = numpy.ndarray(shape, dtype=blob_array.dtype)
+        extended_blob_array[...,:2] = blob_array
+        extended_blob_array[...,2] = 1.
+        warped_blob = invert_transform.dot(extended_blob_array.transpose())
+        return [(x,y) for x,y,z in warped_blob.transpose()]
+
 
     def _features(self, img):
         img_size = cv.GetSize(img)
