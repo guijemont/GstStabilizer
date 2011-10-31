@@ -139,7 +139,7 @@ class HornSchunckFinder(Finder):
         self.resize_ratio = resize_ratio
         self.period = period
 
-    def optical_flow_img(self, img0, img1):
+    def optical_flow_img(self, img0, img1, blob_buf0=None):
         if isinstance(img0, numpy.ndarray):
             img0 = numpy_to_iplimg(img0)
             img1 = numpy_to_iplimg(img1)
@@ -170,7 +170,10 @@ class HornSchunckFinder(Finder):
         converted_origin = self._convert_points(origin)
         converted_dest = self._convert_points(dest)
 
-        return converted_origin, converted_dest
+        return (converted_origin, converted_dest), None
+
+    def warp_blob(self, blob, transform_matrix):
+        return blob
 
     def _velocities_to_vectors(self, velx, vely, width, height):
         origin = []
@@ -213,7 +216,7 @@ class SURFFinder(Finder):
             img = cv.fromarray(img)
         return cv.ExtractSURF(img, None, self._mem_storage, (1, 1000, 3, 4))
 
-    def optical_flow_img(self, img0, img1):
+    def optical_flow_img(self, img0, img1, blob_buf0):
         surf_keypoints0, surf_keypoints1, dists = self.matching_surf_keypoints(img0, img1)
 
         print "found %d matches" % len(surf_keypoints0)
@@ -229,7 +232,10 @@ class SURFFinder(Finder):
         keypoints1 = surf_to_normal_point_list(surf_keypoints1)
         #keypoints1 = self._refine_points(img1, keypoints1)
 
-        return keypoints0, keypoints1
+        return (keypoints0, keypoints1), None
+
+    def warp_blob(self, blob, transform_matrix):
+        return blob
 
     def matching_surf_keypoints(self, img0, img1):
         # return a pair of list of SURF keypoints that are supposed to match
