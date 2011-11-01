@@ -118,10 +118,13 @@ class OpticalFlowCorrector(gst.Element):
             transform = self._perspective_transform_from_flow(flow)
 
             img = img_of_buf(buf)
+
+            new_img = self._reference_img.copy()
             
             new_img = cv2.warpPerspective(img, transform,
                                           (img.shape[1], img.shape[0]),
-                                          flags=cv2.WARP_INVERSE_MAP) #, borderMode=cv2.BORDER_TRANSPARENT)
+                                          dst=new_img,
+                                          flags=cv2.WARP_INVERSE_MAP, borderMode=cv2.BORDER_TRANSPARENT)
 
             new_buf = buf_of_img(new_img, bufmodel=buf)
             self._reference_img = new_img
