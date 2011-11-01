@@ -9,7 +9,7 @@ import cv
 
 from cv_gst_util import *
 
-from cv_flow_finder import LucasKanadeFinder, HornSchunckFinder
+from cv_flow_finder import LucasKanadeFinder
 
 
 class OpticalFlowFinder(gst.Element):
@@ -32,7 +32,6 @@ class OpticalFlowFinder(gst.Element):
     PICKLE_FORMAT = 2
 
     # Algorithms to chose from:
-    HORN_SCHUNCK = 0
     LUCAS_KANADE = 1
 
     corner_count = gobject.property(type=int,
@@ -71,14 +70,9 @@ class OpticalFlowFinder(gst.Element):
                                         blurb='top limit of the ignore box, deactivated if -1')
 
     algorithm = gobject.property(type=int,
-                                 default=HORN_SCHUNCK,
+                                 default=LUCAS_KANADE,
                                  blurb= """algorithm to use:
-                                 %d: Horn Schunk (dense, slow)
-                                 %d: Lucas Kanade (discreet, faster, more precise, not good for big changes between frames) """ % (HORN_SCHUNCK, LUCAS_KANADE))
-    hs_resize_ratio = gobject.property(type=int,
-                                       default=5,
-                                       blurb="When using Horn Schunk, you can accelerate things by resizing the image. This the ratio by which to divide the image. It must be a divisor of the width _and_ height of the frames")
-
+                                 %d: Lucas Kanade (discreet, faster, more precise, not good for big changes between frames) """ % (LUCAS_KANADE))
 
     def __init__(self):
         gst.Element.__init__(self)
@@ -100,8 +94,6 @@ class OpticalFlowFinder(gst.Element):
                                              self.pyramid_level,
                                              self.max_iterations,
                                              self.epsilon)
-        elif self.algorithm == self.HORN_SCHUNCK:
-            self._finder = HornSchunckFinder(self.hs_resize_ratio)
         else:
             raise ValueError("Unknown algorithm")
 
