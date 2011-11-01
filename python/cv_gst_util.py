@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 
-import cv, gst
+import cv2, gst, numpy
 
+# note that we only care about what OpticalFlowCorrector supports
 def img_of_buf(buf):
     if buf is None:
         return None
@@ -12,12 +13,13 @@ def img_of_buf(buf):
         # yeah, we only support 8 bits per channel
         channels = struct['bpp'] / 8
         depth = 8
-    img = cv.CreateImageHeader((width, height), depth, channels);
-    cv.SetData (img, buf.data)
+    array = numpy.frombuffer(buf, dtype=numpy.uint8)
+    img = array.reshape((height, width, channels))
+
     return img
 
 def buf_of_img(img, bufmodel=None):
-    buf = gst.Buffer(img.tostring())
+    buf = gst.Buffer(img)
     if bufmodel is not None:
         buf.caps = bufmodel.caps
         buf.duration = bufmodel.duration
@@ -27,20 +29,13 @@ def buf_of_img(img, bufmodel=None):
     return buf
 
 def gray_scale(img):
-    new_img = cv.CreateImage(cv.GetSize(img), cv.IPL_DEPTH_8U, 1)
-    cv.CvtColor(img, new_img, cv.CV_RGB2GRAY)
+    new_img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
     return new_img
 
 def green_component(img):
     new_img = cv.CreateImage(cv.GetSize(img), cv.IPL_DEPTH_8U, 1)
     cv.Split(img, None, new_img, None, None)
     return new_img
-
-def resize(img, new_width, new_height):
-    new_img = cv.CreateImage((new_width, new_height), img.depth, img.channels)
-    cv.Resize(img, new_img)
-    return new_img
-
 
 def numpy_to_iplimg(image):
     ipl_image = cv.CreateImageHeader((image.shape[1], image.shape[0]),

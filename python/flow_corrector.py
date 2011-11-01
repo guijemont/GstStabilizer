@@ -1,6 +1,6 @@
 import gobject,gst
 
-import cv
+import cv2
 
 from cv_gst_util import *
 
@@ -118,36 +118,26 @@ class OpticalFlowCorrector(gst.Element):
             transform = self._perspective_transform_from_flow(flow)
 
             img = img_of_buf(buf)
-            new_img = cv.CreateImage((img.width, img.height), cv.IPL_DEPTH_8U, 3)
-            cv.WarpPerspective(img, new_img, transform,
-                               cv.CV_WARP_INVERSE_MAP | cv.CV_WARP_FILL_OUTLIERS)
+            
+            new_img = cv2.warpPerspective(img, transform,
+                                          (img.shape[1], img.shape[0]),
+                                          flags=cv2.WARP_INVERSE_MAP) #, borderMode=cv2.BORDER_TRANSPARENT)
 
             new_buf = buf_of_img(new_img, bufmodel=buf)
-            self._reference_img = img_of_buf(new_buf)
+            self._reference_img = new_img
             self._reference_blob = self._finder.warp_blob(blob, transform)
             return self.srcpad.push(new_buf)
-        except cv.error,e :
+        except cv2.error,e :
             print "got an opencv error (%s), not applying any transform for this frame" % e.message
             self._reference_img = img_of_buf(buf)
             self._reference_blob = None
             return self.srcpad.push(buf)
 
-    def _mat_of_point_list(self, points):
-        n = len(points)
-        mat = cv.CreateMat(1, n, cv.CV_32FC2)
-        for i in xrange(n):
-          mat[0, i] = points[i]
-        return mat
-
     def _perspective_transform_from_flow(self, (points0, points1)):
-        mat0 = self._mat_of_point_list (points0)
-        mat1 = self._mat_of_point_list (points1)
-        transform = cv.CreateMat(3, 3, cv.CV_64F)
-
-        cv.FindHomography(mat0, mat1, transform,
-                          method=cv.CV_RANSAC,
-                          ransacReprojThreshold=3)
-
+        # Ransac and its threshold allow us to easily weed out outliers.
+        transform, mask = cv2.findHomography(points0, points1,
+                                             method=cv2.RANSAC,
+                                             ransacReprojThreshold=3)
         return transform
 
     def _get_flow(self, buf):
@@ -171,8 +161,9 @@ class OpticalFlowCorrector(gst.Element):
         gray_img = gray_scale(color_img)
         gray_ref_img = gray_scale(self._reference_img)
 
-        return self._finder.optical_flow_img(gray_ref_img, gray_img,
+        ret = self._finder.optical_flow_img(gray_ref_img, gray_img,
                                              self._reference_blob)
+        return ret
 
     def _has_ignore_box(self):
         return (-1) not in (self.ignore_box_min_x, self.ignore_box_max_x,

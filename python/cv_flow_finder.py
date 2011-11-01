@@ -3,7 +3,7 @@
 from itertools import izip
 import random
 
-import cv, cv2
+import cv2
 
 import numpy
 
@@ -59,12 +59,6 @@ class LucasKanadeFinder(Finder):
         # corners
         # for now.
         # TODO: add pyramid?
-        if isinstance(img0, numpy.ndarray):
-            img0 = numpy_to_iplimg(img0)
-            img1 = numpy_to_iplimg(img1)
-        if img0.channels > 1:
-            img0 = gray_scale(img0)
-            img1 = gray_scale(img1)
 
         if blob_buf0 is not None and len(blob_buf0) > self.corner_count / 2:
             corners0 = blob_buf0
@@ -73,97 +67,100 @@ class LucasKanadeFinder(Finder):
 
         n_features = len(corners0)
 
-        corners1, status, track_errors = cv.CalcOpticalFlowPyrLK (
-                     img0, img1, None, None,
-                     corners0,
-                     (self.win_size,) * 2, # win size
-                     self.pyramid_level, # pyramid level
-                     (cv.CV_TERMCRIT_ITER|cv.CV_TERMCRIT_EPS, # stop type
-                      self.max_iterations, # max iterations
-                      self.epsilon), # min accuracy
-                     0) # flags
+        corners1, status, errors = cv2.calcOpticalFlowPyrLK(
+                    img0, img1, corners0, None,
+                    winSize=(self.win_size,) * 2,
+                    maxLevel=self.pyramid_level,
+                    criteria=(cv2.TERM_CRITERIA_MAX_ITER | cv2.TERM_CRITERIA_EPS,
+                              self.max_iterations, self.epsilon)
+                    )
 
-        corners0 = self._filter_features(corners0, status)
-        corners1 = self._filter_features(corners1, status)
-        track_errors = self._filter_features(track_errors, status)
+        # these are a few workarounds because openCV return things in a format
+        # slightly different from what we want.
+        if status.dtype == numpy.uint8:
+            status.dtype = numpy.bool8
+        if len(status.shape) > 1:
+            assert(status.shape[1] == 1)
+            status.shape = status.shape[:1]
+        if len(errors.shape) > 1:
+            assert(errors.shape[1] == 1)
+            errors.shape = errors.shape[:1]
 
+        corners0 = corners0[status]
+        corners1 = corners1[status]
+
+        errors = errors[status]
         print "%d features found, %d matched"  % (n_features, len(corners0)), ';',
-        if len(track_errors):
-            print "errors min/max/avg:", (min(track_errors),
-                                          max(track_errors),
-                                          sum(track_errors)/len(track_errors))
+        if len(errors):
+            print "errors min/max/avg:", (min(errors),
+                                          max(errors),
+                                          (sum(errors)/len(errors)))
 
         return ((corners0, corners1), corners1)
 
     def warp_blob(self, blob, transform_matrix):
-        _, invert_transform = cv2.invert(numpy.asarray(transform_matrix))
-        blob_array = numpy.asarray(blob)
-        shape = (blob_array.shape[0], 3)
-        extended_blob_array = numpy.ndarray(shape, dtype=blob_array.dtype)
-        extended_blob_array[...,:2] = blob_array
-        extended_blob_array[...,2] = 1.
-        warped_blob = invert_transform.dot(extended_blob_array.transpose())
-        return [(x,y) for x,y,z in warped_blob.transpose()]
-
+        if transform_matrix.dtype != numpy.float32:
+            new_transform = numpy.ndarray(transform_matrix.shape,
+                                          numpy.float32)
+            new_transform[:] = transform_matrix
+            transform_matrix = new_transform
+        _, invert_transform = cv2.invert(transform_matrix)
+        shape = (blob.shape[0], 3)
+        extended_blob = numpy.ndarray(shape, dtype=blob.dtype)
+        extended_blob[...,:2] = blob
+        extended_blob[...,2] = 1.
+        warped_blob = invert_transform.dot(extended_blob.transpose())
+        return warped_blob.transpose()[...,:2]
 
     def _features(self, img):
-        img_size = cv.GetSize(img)
-        eigImage = cv.CreateImage(img_size, cv.IPL_DEPTH_8U, 1)
-        tempImage = cv.CreateImage(img_size, cv.IPL_DEPTH_8U, 1)
+        features = cv2.goodFeaturesToTrack(img,
+                                           self.corner_count,
+                                           self.corner_quality_level,
+                                           self.corner_min_distance,
+                                           mask=self.mask)
+        if len(features.shape) == 3:
+            assert(features.shape[1:] == (1,2))
+            features.shape = (features.shape[0],2)
 
-        mask = None
-        features = cv.GoodFeaturesToTrack(img, eigImage, tempImage,
-                                          self.corner_count, #number of corners to detect
-                                          self.corner_quality_level, #Multiplier for the max/min
-                                                #eigenvalue; specifies the minimal
-                                                #accepted quality of image corners
-                                          self.corner_min_distance, # minimum distance between returned corners
-                                          mask=self.mask
-                                          )
-
-        return cv.FindCornerSubPix(img, features, (10, 10), (-1, -1),
-                                   (cv.CV_TERMCRIT_ITER | cv.CV_TERMCRIT_EPS,
-                                    20, 0.03))
-
-    def _filter_features(self, features, flter):
-        #filtered_errors = [err for (err, status) in zip(errors, flter) if status]
-        #n = len(filtered_errors) / 2 # we want to keep the best third only
-        #admissible_error = sorted(filtered_errors)[n]
-        return [ p for (keep,p) in izip(flter, features) if keep]
+        cv2.cornerSubPix(img, features, (10, 10), (-1, -1),
+                         (cv2.TERM_CRITERIA_MAX_ITER | cv2.TERM_CRITERIA_EPS,
+                         20, 0.03))
+        return features
 
 
 class SURFFinder(Finder):
     def __init__(self, *args, **kw):
         super(SURFFinder, self).__init__(*args, **kw)
-        self._mem_storage = cv.CreateMemStorage()
-        self._surf = cv2.SURF(1000)
+        self._surf = cv2.SURF(1000, _extended=True)
 
     def get_surf(self, img):
         # returns  (keypoints, descriptors) where:
-        # - keypoints is a list of ((x, y), laplacian, size, direction, hessian)
-        # - descriptor is a cvSeq (kinda list?) of lists of 128 floats each
-        #return self._surf.detect(img, None)
-        if type(img) == numpy.ndarray:
-            if len(img.shape)==3 and img.shape[2] > 1:
-                img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
-            img = cv.fromarray(img)
-        return cv.ExtractSURF(img, None, self._mem_storage, (1, 1000, 3, 4))
+        # - keypoints is a list of cv2.Keypoint instances
+        # - descriptor is a numpy.ndarray such that descriptors[i] is a
+        # 128-float array which is the SURF descriptor of keypoints[i]
+
+        keypoints, descriptors = self._surf.detect(img, None, False)
+
+        # descriptors might not be provided in the right shape, but it should
+        # have the right number of elements to be converted.
+        descriptors.shape = (len(keypoints), 128)
+        return keypoints, descriptors
 
     def optical_flow_img(self, img0, img1, blob_buf0):
         surf_keypoints0, surf_keypoints1, dists = self.matching_surf_keypoints(img0, img1)
 
         print "found %d matches" % len(surf_keypoints0)
 
-        def surf_to_normal_point_list(surf_kp_list):
-            return [p[0] for p in surf_kp_list]
+        def surf_to_normal_point_array(surf_kp_list):
+            # probably room for optimisation here
+            return numpy.asarray([p.pt for p in surf_kp_list])
 
         surf_keypoints0, surf_keypoints1 = self._filter_diverging_angles(surf_keypoints0,
                                                                          surf_keypoints1)
 
-        keypoints0 = surf_to_normal_point_list(surf_keypoints0)
-        #keypoints0 = self._refine_points(img0, keypoints0)
-        keypoints1 = surf_to_normal_point_list(surf_keypoints1)
-        #keypoints1 = self._refine_points(img1, keypoints1)
+        keypoints0 = surf_to_normal_point_array(surf_keypoints0)
+        keypoints1 = surf_to_normal_point_array(surf_keypoints1)
+
 
         return (keypoints0, keypoints1), None
 
@@ -172,8 +169,7 @@ class SURFFinder(Finder):
 
     def matching_surf_keypoints(self, img0, img1):
         # return a pair of list of SURF keypoints that are supposed to match
-        # each other. SURF keypoints are in a tuple of the following format:
-        # ((x, y), laplacian, size, dir, hessian)
+        # each other. 
 
         keypoints0, descriptors0 = self.get_surf(img0)
         print "img0: found %d points" % len(keypoints0)
@@ -192,9 +188,7 @@ class SURFFinder(Finder):
     def _filter_diverging_angles(self, surf_keypoints0, surf_keypoints1):
         rotation_angles = []
         for spt0, spt1 in izip(surf_keypoints0, surf_keypoints1):
-            dir0 = spt0[3]
-            dir1 = spt1[3]
-            angle = (dir1 - dir0) % 360
+            angle = (spt1.angle - spt0.angle) % 360
 
             if angle > 180:
                 angle -= 360
@@ -218,23 +212,11 @@ class SURFFinder(Finder):
 
         return res0, res1
 
-    def _refine_points(self, img, points):
-        if isinstance(img, cv.iplimage):
-            return cv.FindCornerSubPix(img, points, (10, 10), (-1, -1),
-                (cv.CV_TERMCRIT_ITER | cv.CV_TERMCRIT_EPS,
-                 20, 0.03))
-        else:
-            points = numpy.asarray(points, dtype=numpy.float32)
-            return cv2.cornerSubPix(img, points, (10, 10), (-1, -1),
-                                    (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT,
-                                     20, 0.03))
-    def _find_neighbours(self, descriptors0, descriptors1):
+    def _find_neighbours(self, haystack, needles):
         # return a list of pairs (idx0, idx1) such that descriptors0[idx0] is
         # very likely to describe the same feature as descriptors1[idx1]
         # using the same params as the find_obj.cpp demo from opencv
 
-        haystack = numpy.asarray(descriptors0, dtype=numpy.float32)
-        needles = numpy.asarray(descriptors1, dtype=numpy.float32)
 
         # FIXME: have that an instance member when we match against first pic
         flann = cv2.flann_Index(haystack,
