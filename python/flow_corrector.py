@@ -130,8 +130,8 @@ class OpticalFlowCorrector(gst.Element):
             if self.props.multiply_transforms:
                 # since we get the flow between original frames, we need to
                 # accumulate the transformations
-                self._reference_transform = \
-                    self._reference_transform.dot(transform)
+                 self._reference_transform = \
+                    transform.dot(self._reference_transform)
             else:
                 self._reference_transform = transform
 
