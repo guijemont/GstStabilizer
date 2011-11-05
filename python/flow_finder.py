@@ -76,10 +76,6 @@ class OpticalFlowFinder(gst.Element):
         self._finder = None
 
     def _chain(self, pad, buf):
-        if self._finder is None:
-            # FIXME: do that at state change?
-            self._finder = self._create_finder()
-
         img = img_of_buf(buf)
 
         if self._previous_img is not None:
@@ -97,8 +93,17 @@ class OpticalFlowFinder(gst.Element):
 
         return self.srcpad.push(new_buf)
 
-    def _create_finder(self):
+    def do_change_state(self, state_change):
+        if state_change == gst.STATE_CHANGE_NULL_TO_READY:
+            self._finder = self._create_finder()
+        elif state_change == gst.STATE_CHANGE_READY_TO_NULL:
+            self._finder = None
+            self._previous_img = None
+            self._previous_blob = None
 
+        return gst.Element.do_change_state(self, state_change)
+
+    def _create_finder(self):
         if self.algorithm == self.LUCAS_KANADE:
             finder = LucasKanadeFinder(self.corner_count,
                                              self.corner_quality_level,
