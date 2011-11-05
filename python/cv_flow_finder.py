@@ -127,6 +127,12 @@ class LucasKanadeFinder(Finder):
                          20, 0.03))
         return features
 
+class FrameSURFInfo(object):
+    def __init__(self, keypoints, descriptors, flann, *args, **kw):
+        super(FrameSURFInfo, self).__init__(*args, **kw)
+        self.keypoints = keypoints
+        self.descriptors = descriptors
+        self.flann = flann
 
 class SURFFinder(Finder):
     def __init__(self, *args, **kw):
@@ -146,8 +152,9 @@ class SURFFinder(Finder):
         descriptors.shape = (len(keypoints), 128)
         return keypoints, descriptors
 
-    def optical_flow_img(self, img0, img1, blob_buf0):
-        surf_keypoints0, surf_keypoints1, dists = self.matching_surf_keypoints(img0, img1)
+    def optical_flow_img(self, img0, img1, blob0):
+        # blob0 is a FrameSURFInfo
+        surf_keypoints0, surf_keypoints1, dists, new_blob = self.matching_surf_keypoints(img0, img1, blob0)
 
         print "found %d matches" % len(surf_keypoints0)
 
@@ -162,28 +169,39 @@ class SURFFinder(Finder):
         keypoints1 = surf_to_normal_point_array(surf_keypoints1)
 
 
-        return (keypoints0, keypoints1), None
+        return (keypoints0, keypoints1), new_blob
 
     def warp_blob(self, blob, transform_matrix):
-        return blob
+        # FIXME: actually implement this
+        return None
 
-    def matching_surf_keypoints(self, img0, img1):
+    def matching_surf_keypoints(self, img0, img1, blob0):
         # return a pair of list of SURF keypoints that are supposed to match
         # each other. 
 
-        keypoints0, descriptors0 = self.get_surf(img0)
-        print "img0: found %d points" % len(keypoints0)
+        if blob0 is None:
+            keypoints0, descriptors0 = self.get_surf(img0)
+            print "img0: found %d points" % len(keypoints0)
+            flann0 = None
+        else:
+            keypoints0 = blob0.keypoints
+            descriptors0 = blob0.descriptors
+            flann0 = blob0.flann
+            print "img0: using %d points from blob" % len(keypoints0)
+            print "flann from blob:", flann0
         keypoints1, descriptors1 = self.get_surf(img1)
         print "img1: found %d points" % len(keypoints1)
 
-        indices, dists = self._find_neighbours(descriptors0, descriptors1)
+        indices, dists, flann1 = self._find_neighbours(descriptors0, descriptors1, flann0)
 
         (result_keypoints0, result_keypoints1) = ([], [])
         for idx0, idx1 in indices:
             result_keypoints0.append(keypoints0[idx0])
             result_keypoints1.append(keypoints1[idx1])
 
-        return result_keypoints0, result_keypoints1, dists
+        new_blob = FrameSURFInfo(keypoints1, descriptors1, flann1)
+
+        return result_keypoints0, result_keypoints1, dists, new_blob
 
     def _filter_diverging_angles(self, surf_keypoints0, surf_keypoints1):
         rotation_angles = []
@@ -212,29 +230,43 @@ class SURFFinder(Finder):
 
         return res0, res1
 
-    def _find_neighbours(self, haystack, needles):
+    def _find_neighbours(self, descriptors0, descriptors1, flann0):
         # return a list of pairs (idx0, idx1) such that descriptors0[idx0] is
         # very likely to describe the same feature as descriptors1[idx1]
         # using the same params as the find_obj.cpp demo from opencv
 
+        flann1 = None
 
-        # FIXME: have that an instance member when we match against first pic
-        flann = cv2.flann_Index(haystack,
-                                {'algorithm': FLANN_INDEX_KDTREE,
-                                'trees': 4})
-        indices, dists = flann.knnSearch(needles, 2, params={})
-        # descriptors0[indices[i][0]] <-> descriptors1[i]
+        if flann0 is None:
+            flann1 = cv2.flann_Index(descriptors1,
+                                    {'algorithm': FLANN_INDEX_KDTREE,
+                                    'trees': 4})
+            indices, dists = flann1.knnSearch(descriptors0, 2, params={})
+            needles_number = len(descriptors0)
+            # we did a search of descriptors0 in descriptors1, and we got the
+            # indices in descriptors1 where we can find the elements of
+            # descriptors0, indices are for descriptors1
+            # descriptors1[indices[i][0]] <-> descriptors0[i]
+        else:
+            print "searching using flann", flann0
+            needles_number = len(descriptors1)
+            indices, dists = flann0.knnSearch(descriptors1, 2, params={})
+            # reverse case of above, indices are for descriptors0
+            # descriptors0[indices[i][0]] <-> descriptors1[i]
 
         result = []
         result_dists = []
 
-        for i, flann_idx, (small_dist, big_dist) in izip(xrange(len(needles)),
+        for i, flann_idx, (small_dist, big_dist) in izip(xrange(needles_number),
                                                          indices,
                                                          dists):
             if small_dist < big_dist * 0.6:
-                result.append((flann_idx[0], i))
+                if flann0 is not None:
+                    result.append((flann_idx[0], i))
+                else:
+                    result.append((i, flann_idx[0]))
                 result_dists.append(small_dist)
-        return result, result_dists
+        return result, result_dists, flann1
 
 
 class FinderDemo(object):
