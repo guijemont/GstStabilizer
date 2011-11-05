@@ -88,7 +88,7 @@ class OpticalFlowCorrector(gst.Element):
         self._reference_transform = numpy.asarray([[1., 0., 0.],
                                                    [0., 1., 0.],
                                                    [0., 0., 1.]],
-                                                   dtype=numpy.float64)
+                                                   dtype=numpy.float128)
 
         self._finder = None
 
@@ -139,7 +139,9 @@ class OpticalFlowCorrector(gst.Element):
 
             new_img = self._last_output_img.copy()
             
-            new_img = cv2.warpPerspective(img, self._reference_transform,
+            new_img = cv2.warpPerspective(img,
+                                          numpy.asarray(self._reference_transform,
+                                                        dtype=numpy.float64),
                                           (img.shape[1], img.shape[0]),
                                           dst=new_img,
                                           flags=cv2.WARP_INVERSE_MAP, borderMode=cv2.BORDER_TRANSPARENT)
