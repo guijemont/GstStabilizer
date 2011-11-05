@@ -3,7 +3,7 @@ import gobject,gst
 
 import math
 
-import cv
+import cv2
 
 from cv_gst_util import *
 
@@ -30,13 +30,13 @@ class ArrowDrawer(object):
             return (int(x), int(y))
         origin = int_pos(origin)
         end = int_pos(end)
-        cv.Line(img, origin, end, color, self._width)
+        cv2.line(img, origin, end, color, self._width)
         points = self._compute_arrow_points(origin, end)
         if points is None:
             return
         C, D = points
-        cv.Line(img, end, C, color, self._width)
-        cv.Line(img, end, D, color, self._width)
+        cv2.line(img, end, C, color, self._width)
+        cv2.line(img, end, D, color, self._width)
 
     def _compute_arrow_points(self, (xa, ya), (xb, yb), length=20.):
         # The arrow tip is made by joining B (xb, yb) to C and D. This method
