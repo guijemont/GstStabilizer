@@ -25,6 +25,7 @@ class OpticalFlowMuxer(gst.Element):
 
         self.flow_sink_pad = gst.Pad(self.flow_sink_template)
         self.flow_sink_pad.set_chain_function(self._chain)
+        self.flow_sink_pad.set_event_function(self._flow_event)
         self.add_pad(self.flow_sink_pad)
 
         self.main_sink_pad = gst.Pad(self.main_sink_template)
@@ -57,6 +58,15 @@ class OpticalFlowMuxer(gst.Element):
                 return gst.FLOW_ERROR
 
         return gst.FLOW_OK
+
+    def _flow_event(self, pad, event):
+        # We just drop all new segment events from the flow pad. We assume they
+        # are only duplicates of those we got on main_sink_pad (which are
+        # automatically forwarded since we have no event handling function)
+        # This might be dirty but seems to be working.
+        if event.type == gst.EVENT_NEWSEGMENT:
+            return True
+        return False
 
 
 class TestFlowMuxer(OpticalFlowMuxer):
