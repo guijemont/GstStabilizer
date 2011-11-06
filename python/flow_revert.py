@@ -56,7 +56,8 @@ class OpticalFlowRevert(OpticalFlowMuxer):
                                                     dtype=numpy.float64),
                                       (img.shape[1], img.shape[0]),
                                       dst=new_img,
-                                      flags=cv2.WARP_INVERSE_MAP, borderMode=cv2.BORDER_TRANSPARENT)
+                                      flags=cv2.WARP_INVERSE_MAP + cv2.INTER_CUBIC,
+                                      borderMode=cv2.BORDER_TRANSPARENT)
 
         self._last_output_img = new_img
         new_buf = buf_of_img(new_img, bufmodel=buf)
