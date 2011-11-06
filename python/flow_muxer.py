@@ -58,3 +58,35 @@ class OpticalFlowMuxer(gst.Element):
 
         return gst.FLOW_OK
 
+
+class TestFlowMuxer(OpticalFlowMuxer):
+    __gstdetails__ = ("Optical flow muxer",
+                    "Filter/Video",
+                    "test for the base OpticalFLowMuxer class",
+                    "Guillaume Emont")
+    main_sink_template = gst.PadTemplate ("mainsink",
+                                          gst.PAD_SINK,
+                                          gst.PAD_ALWAYS,
+                                          gst.Caps('video/x-raw-rgb,depth=24'))
+    src_template = gst.PadTemplate("src",
+                                    gst.PAD_SRC,
+                                    gst.PAD_ALWAYS,
+                                    gst.Caps('video/x-raw-rgb,depth=24'))
+    __gsttemplates__ = (OpticalFlowMuxer.flow_sink_template,
+                        main_sink_template,
+                        src_template)
+
+    def __init__(self, *args, **kw):
+        super(TestFlowMuxer, self).__init__(*args, **kw)
+
+        self.srcpad = gst.Pad(self.src_template)
+        self.add_pad(self.srcpad)
+
+    def mux(self, buf, flow):
+        ret = self.srcpad.push(buf)
+        return ret
+
+
+import gobject
+gobject.type_register (TestFlowMuxer)
+ret = gst.element_register (TestFlowMuxer, 'testflowmuxer')
