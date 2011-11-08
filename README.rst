@@ -5,6 +5,7 @@ This stuff is still in a rather early stage of development (or should I say
 "research"), but might already be useful in some use cases.
 
 You should be able to get the latest version like this::
+
   git clone git://gitorious.org/gststabilizer/gststabilizer.git
 
 
@@ -25,6 +26,7 @@ Usage
 For the elements to be recognized, you need to point ``GST_PLUGIN_PATH``
 
 Example pipeline::
+
   gst-launch filesrc location=<my_shaky_video> ! decodebin ! tee name=tee \
     tee. ! ffmpegcolorspace ! opticalflowfinder ! opticalflowrevert name=mux \
     tee. ! ffmpegcolorspace ! mux. \
@@ -36,6 +38,7 @@ too laggy, your probably want to encode and save the stream instead of sending
 it to a visualisation sink.
 
 You want to have a look at the myriad of options that can be set in ``opticalflowfinder``::
+
   gst-inspect opticalflowfinder
 
 The most important of them is the algorithm, the two currently implemented are:
