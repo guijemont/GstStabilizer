@@ -6,7 +6,7 @@ This stuff is still in a rather early stage of development (or should I say
 
 You should be able to get the latest version like this::
 
-  git clone git://gitorious.org/gststabilizer/gststabilizer.git
+  git clone git://github.com/guijemont/GstStabilizer.git
 
 License
 -------
