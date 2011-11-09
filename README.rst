@@ -8,6 +8,16 @@ You should be able to get the latest version like this::
 
   git clone git://gitorious.org/gststabilizer/gststabilizer.git
 
+License
+-------
+
+This software is distributed under the terms of the GNU Lesser General Public
+License as published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
+
+A copy of the GNU Lesser General Public License, and of the GNU General Public
+License (to which it refers) respectively in the files COPYING.LESSER and
+COPYING.
 
 Dependencies
 ------------
