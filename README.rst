@@ -33,7 +33,9 @@ Dependencies
 Usage
 -----
 
-For the elements to be recognized, you need to point ``GST_PLUGIN_PATH``
+For the elements to be recognized, you need to include in  ``GST_PLUGIN_PATH``
+the directory where you checked out GstStabilizer (that is, the directory that
+contains the ``python`` directory and *not* the ``python`` directory itself).
 
 Example pipeline::
 
