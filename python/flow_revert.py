@@ -40,6 +40,10 @@ class OpticalFlowRevert(OpticalFlowMuxer):
                         main_sink_template,
                         src_template)
 
+    demo_mode = gobject.property(type=bool,
+                                 default=False,
+                                 blurb="Output a mix of the unstabilised and stabilised streams")
+
     def __init__(self, *args, **kw):
         super(OpticalFlowRevert, self).__init__(*args, **kw)
 
@@ -79,8 +83,16 @@ class OpticalFlowRevert(OpticalFlowMuxer):
                                       borderMode=cv2.BORDER_TRANSPARENT)
 
         self._last_output_img = new_img
-        new_buf = buf_of_img(new_img, bufmodel=buf)
-        return self.srcpad.push(new_buf)
+        if not self.demo_mode:
+            new_buf = buf_of_img(new_img, bufmodel=buf)
+            return self.srcpad.push(new_buf)
+        else:
+            demo_img = img.copy()
+            width = img.shape[1]
+            mid_width = width/2
+            demo_img[:, mid_width:] = new_img[:, mid_width:]
+            new_buf = buf_of_img(demo_img, bufmodel=buf)
+            return self.srcpad.push(new_buf)
 
 
 gobject.type_register (OpticalFlowRevert)
